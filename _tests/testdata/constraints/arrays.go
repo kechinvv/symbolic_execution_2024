@@ -1,7 +1,7 @@
 package main
 
 import (
-    "fmt"
+    _ "fmt"
 )
 
 func compareElement(array []int, index int, value int) int {

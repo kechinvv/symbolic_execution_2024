@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	_ "fmt"
 )
 
 func basicComplexOperations(a complex128, b complex128) complex128 {

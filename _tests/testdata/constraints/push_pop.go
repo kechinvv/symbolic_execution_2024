@@ -1,3 +1,5 @@
+package main
+
 func pushPopIncrementality(j int) int {
     result := j
 
