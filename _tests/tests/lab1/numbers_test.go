@@ -1,10 +1,9 @@
-package tests
+package lab1
 
-import "C"
 import (
 	"fmt"
-	"github.com/mitchellh/go-z3"
 	"testing"
+	"github.com/mitchellh/go-z3"
 )
 
 func testIntegerOperations(t *testing.T) {
@@ -52,7 +51,7 @@ func testIntegerOperations(t *testing.T) {
 	// x + y = -3
 	s.Assert(x.Add(y).Eq(ctx.Int(-3, ctx.IntSort())))
 
-	if v := s.Check(); v != C.Z3_L_TRUE {
+	if v := s.Check(); v != z3.True {
 		fmt.Println("Unsolveable")
 		return
 	}
