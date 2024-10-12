@@ -1,13 +1,9 @@
 package lab1
 
 import (
-	"fmt"
 	"testing"
-
 	"github.com/kechinvv/go-z3/z3"
 )
-
-const int_size = 64
 
 func TestIntegerOperations(t *testing.T) {
 	config := z3.NewContextConfig()
@@ -213,13 +209,4 @@ func TestNestedBitwise(t *testing.T) {
 }
 
 
-func checkWithOutputAndReset(s *z3.Solver) {
-	println(s.AssertionsString())
-	if v, _ := s.Check(); v != true {
-		fmt.Println("Unsolveable")
-	} else {
-		m := s.Model().String()
-		println(m)
-	}
-	s.Reset()
-}
+
