@@ -6,4 +6,4 @@ toolchain go1.22.8
 
 require golang.org/x/tools v0.26.0
 
-require github.com/mitchellh/go-z3 v0.0.0-20191228203228-4cbedeba863f
+require github.com/kechinvv/go-z3 v0.0.0-20241012142128-dbca98fdf7bf

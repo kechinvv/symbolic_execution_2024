@@ -3,64 +3,223 @@ package lab1
 import (
 	"fmt"
 	"testing"
-	"github.com/mitchellh/go-z3"
+
+	"github.com/kechinvv/go-z3/z3"
 )
 
-func testIntegerOperations(t *testing.T) {
-	config := z3.NewConfig()
+const int_size = 64
+
+func TestIntegerOperations(t *testing.T) {
+	config := z3.NewContextConfig()
 	ctx := z3.NewContext(config)
-	config.Close()
-	defer ctx.Close()
 
-	// Logic:
-	// x + y + z > 4
-	// x + y < 2
-	// z > 0
-	// x != y != z
-	// x, y, z != 0
-	// x + y = -3
+	s := z3.NewSolver(ctx)
 
-	// Create the solver
-	s := ctx.NewSolver()
-	defer s.Close()
+	a := ctx.Const("a", ctx.IntSort()).(z3.Int)
+	b := ctx.Const("b", ctx.IntSort()).(z3.Int)
 
-	// Vars
-	x := ctx.Const(ctx.Symbol("x"), ctx.IntSort())
-	y := ctx.Const(ctx.Symbol("y"), ctx.IntSort())
-	z := ctx.Const(ctx.Symbol("z"), ctx.IntSort())
+	s.Assert(a.GT(b))
+	checkWithOutputAndReset(s)
 
-	zero := ctx.Int(0, ctx.IntSort()) // To save repeats
+	s.Assert(a.LT(b).And((a.GT(b)).Not()))
+	checkWithOutputAndReset(s)
 
-	// x + y + z > 4
-	s.Assert(x.Add(y, z).Gt(ctx.Int(4, ctx.IntSort())))
+	s.Assert(a.LT(b).Not().And(a.GT(b).Not()))
+	checkWithOutputAndReset(s)
 
-	// x + y < 2
-	s.Assert(x.Add(y).Lt(ctx.Int(2, ctx.IntSort())))
+}
 
-	// z > 0
-	s.Assert(z.Gt(zero))
+func TestFloatOperations(t *testing.T) {
+	config := z3.NewContextConfig()
+	ctx := z3.NewContext(config)
 
-	// x != y != z
-	s.Assert(x.Distinct(y, z))
+	s := z3.NewSolver(ctx)
 
-	// x, y, z != 0
-	s.Assert(x.Eq(zero).Not())
-	s.Assert(y.Eq(zero).Not())
-	s.Assert(z.Eq(zero).Not())
+	x := ctx.Const("x", ctx.FloatSort(11, 53)).(z3.Float)
+	y := ctx.Const("y", ctx.FloatSort(11, 53)).(z3.Float)
 
-	// x + y = -3
-	s.Assert(x.Add(y).Eq(ctx.Int(-3, ctx.IntSort())))
+	s.Assert(x.GT(y))
+	checkWithOutputAndReset(s)
 
-	if v := s.Check(); v != z3.True {
+	s.Assert(x.LT(y).And((x.GT(y)).Not()))
+	checkWithOutputAndReset(s)
+
+	s.Assert(x.LT(y).Not().And(x.GT(y).Not()))
+	checkWithOutputAndReset(s)
+}
+
+func TestMixedOperations(t *testing.T) {
+	config := z3.NewContextConfig()
+	ctx := z3.NewContext(config)
+
+	s := z3.NewSolver(ctx)
+	fs64 := ctx.FloatSort(11, 53)
+
+	a := ctx.BVConst("a", int_size)
+	b := ctx.Const("b", fs64).(z3.Float)
+	r := ctx.Const("r", fs64).(z3.Float)
+
+	two_int := ctx.FromInt(2, ctx.IntSort()).(z3.Int)
+	zero_int := ctx.FromInt(0, ctx.IntSort()).(z3.Int)
+	ten_float := ctx.FromInt(10, fs64).(z3.Float)
+
+	s.Assert(a.SToInt().Mod(two_int).Eq(zero_int))
+	s.Assert(r.Eq((a.SToFloat(fs64)).Sub(b)))
+	s.Assert(r.LT(ten_float))
+	checkWithOutputAndReset(s)
+
+	s.Assert(a.SToInt().Mod(two_int).Eq(zero_int))
+	s.Assert(r.Eq((a.SToFloat(fs64)).Sub(b)))
+	s.Assert(r.LT(ten_float).Not())
+	checkWithOutputAndReset(s)
+
+	s.Assert(a.SToInt().Mod(two_int).Eq(zero_int).Not())
+	s.Assert(r.Eq((a.SToFloat(fs64)).Sub(b)))
+	s.Assert(r.LT(ten_float))
+	checkWithOutputAndReset(s)
+
+	s.Assert(a.SToInt().Mod(two_int).Eq(zero_int).Not())
+	s.Assert(r.Eq((a.SToFloat(fs64)).Sub(b)))
+	s.Assert(r.LT(ten_float).Not())
+	checkWithOutputAndReset(s)
+}
+
+func TestNestedConditions(t *testing.T) {
+	config := z3.NewContextConfig()
+	ctx := z3.NewContext(config)
+
+	s := z3.NewSolver(ctx)
+	fs64 := ctx.FloatSort(11, 53)
+
+	a := ctx.Const("a", ctx.IntSort()).(z3.Int)
+	b := ctx.Const("b", fs64).(z3.Float)
+
+	zero_int := ctx.FromInt(0, ctx.IntSort()).(z3.Int)
+	zero_float := ctx.FromInt(0, fs64).(z3.Float)
+
+	s.Assert(a.LT(zero_int))
+	s.Assert(b.LT(zero_float))
+	checkWithOutputAndReset(s)
+
+	s.Assert(a.LT(zero_int))
+	s.Assert(b.LT(zero_float).Not())
+	checkWithOutputAndReset(s)
+
+	s.Assert(a.LT(zero_int).Not())
+	checkWithOutputAndReset(s)
+}
+
+func TestBitwiseOperations(t *testing.T) {
+	config := z3.NewContextConfig()
+	ctx := z3.NewContext(config)
+
+	s := z3.NewSolver(ctx)
+
+	a := ctx.BVConst("a", int_size)
+	b := ctx.BVConst("b", int_size)
+
+	zero_bv := ctx.FromInt(0, ctx.BVSort(int_size)).(z3.BV)
+	one_bv := ctx.FromInt(1, ctx.BVSort(int_size)).(z3.BV)
+
+	s.Assert(a.And(one_bv).Eq(zero_bv).And(b.And(one_bv).Eq(zero_bv)))
+	checkWithOutputAndReset(s)
+
+	s.Assert(a.And(one_bv).Eq(zero_bv).And(b.And(one_bv).Eq(zero_bv)).Not())
+	s.Assert(a.And(one_bv).Eq(one_bv).And(b.And(one_bv).Eq(one_bv)))
+	checkWithOutputAndReset(s)
+
+	s.Assert(a.And(one_bv).Eq(zero_bv).And(b.And(one_bv).Eq(zero_bv)).Not())
+	s.Assert(a.And(one_bv).Eq(one_bv).And(b.And(one_bv).Eq(one_bv)).Not())
+	checkWithOutputAndReset(s)
+}
+
+func TestAdvancedBitwise(t *testing.T) {
+	config := z3.NewContextConfig()
+	ctx := z3.NewContext(config)
+
+	s := z3.NewSolver(ctx)
+
+	a := ctx.BVConst("a", int_size)
+	b := ctx.BVConst("b", int_size)
+
+	s.Assert(a.SToInt().GT(b.SToInt()))
+	checkWithOutputAndReset(s)
+
+	s.Assert(a.SToInt().GT(b.SToInt()).Not())
+	s.Assert(a.SToInt().LT(b.SToInt()))
+	checkWithOutputAndReset(s)
+
+	s.Assert(a.SToInt().GT(b.SToInt()).Not())
+	s.Assert(a.SToInt().LT(b.SToInt()).Not())
+	checkWithOutputAndReset(s)
+}
+
+
+func TestCombinedBitwise(t *testing.T) {
+	config := z3.NewContextConfig()
+	ctx := z3.NewContext(config)
+
+	s := z3.NewSolver(ctx)
+
+	a := ctx.BVConst("a", int_size)
+	b := ctx.BVConst("b", int_size)
+	r := ctx.BVConst("r", int_size)
+
+	zero_bv := ctx.FromInt(0, ctx.BVSort(int_size)).(z3.BV)
+	ten_bv := ctx.FromInt(10, ctx.BVSort(int_size)).(z3.BV)
+
+	s.Assert(a.And(b).Eq(zero_bv))
+	checkWithOutputAndReset(s)
+
+	s.Assert(a.And(b).Eq(zero_bv).Not())
+	s.Assert(r.Eq(a.And(b)))
+	s.Assert(r.SToInt().GT(ten_bv.SToInt()))
+	checkWithOutputAndReset(s)
+
+	s.Assert(a.And(b).Eq(zero_bv).Not())
+	s.Assert(r.Eq(a.And(b)))
+	s.Assert(r.SToInt().GT(ten_bv.SToInt()).Not())
+	checkWithOutputAndReset(s)
+}
+
+
+func TestNestedBitwise(t *testing.T) {
+	config := z3.NewContextConfig()
+	ctx := z3.NewContext(config)
+
+	s := z3.NewSolver(ctx)
+
+	a := ctx.BVConst("a", int_size)
+	b := ctx.BVConst("b", int_size)
+
+	zero_bv := ctx.FromInt(0, ctx.BVSort(int_size)).(z3.BV)
+
+	s.Assert(a.SToInt().LT(zero_bv.SToInt()))
+	checkWithOutputAndReset(s)
+
+	s.Assert(a.SToInt().LT(zero_bv.SToInt()).Not())
+	s.Assert(b.SToInt().LT(zero_bv.SToInt()))
+	checkWithOutputAndReset(s)
+
+	s.Assert(a.SToInt().LT(zero_bv.SToInt()).Not())
+	s.Assert(b.SToInt().LT(zero_bv.SToInt()).Not())
+	s.Assert(a.And(b).Eq(zero_bv))
+	checkWithOutputAndReset(s)
+
+	s.Assert(a.SToInt().LT(zero_bv.SToInt()).Not())
+	s.Assert(b.SToInt().LT(zero_bv.SToInt()).Not())
+	s.Assert(a.And(b).Eq(zero_bv).Not())
+	checkWithOutputAndReset(s)
+}
+
+
+func checkWithOutputAndReset(s *z3.Solver) {
+	println(s.AssertionsString())
+	if v, _ := s.Check(); v != true {
 		fmt.Println("Unsolveable")
-		return
+	} else {
+		m := s.Model().String()
+		println(m)
 	}
-
-	// Get the resulting model:
-	m := s.Model()
-	assignments := m.Assignments()
-	m.Close()
-	fmt.Printf("x = %s\n", assignments["x"])
-	fmt.Printf("y = %s\n", assignments["y"])
-	fmt.Printf("z = %s\n", assignments["z"])
+	s.Reset()
 }

@@ -1,3 +1,7 @@
+github.com/aclements/go-z3 v0.0.0-20220809013456-4675d5f90ca5 h1:A27FEXOK2zSHuCwXwmPIKfrHcT+caybRGb1kaW4KOBI=
+github.com/aclements/go-z3 v0.0.0-20220809013456-4675d5f90ca5/go.mod h1:Dcqk4DTCIWIVv0jiFnYg5nnTIOWZ3JgU/mYjb5puA1s=
+github.com/kechinvv/go-z3 v0.0.0-20241012142128-dbca98fdf7bf h1:oF07T7gQYWuMU7YAZmZoRFKA0/yjJZT1M72OBSqlsG0=
+github.com/kechinvv/go-z3 v0.0.0-20241012142128-dbca98fdf7bf/go.mod h1:UMyqrEFWHQl31Ry1bABnb6n5BNppsQOPKd370NBwISs=
 github.com/mitchellh/go-z3 v0.0.0-20191228203228-4cbedeba863f h1:I2Rx8N5cDzVL4amj76w9F+fRS5zvZdmMyphvPMA+HJQ=
 github.com/mitchellh/go-z3 v0.0.0-20191228203228-4cbedeba863f/go.mod h1:SCzzTuqNJ1cVcftwEustt+uZcgDQhp0lJnWQPU3a3Lw=
 golang.org/x/mod v0.21.0 h1:vvrHzRwRfVKSiLrG+d4FMl/Qi4ukBCE6kZlTUkDYRT0=
