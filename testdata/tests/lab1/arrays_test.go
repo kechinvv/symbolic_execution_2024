@@ -2,7 +2,7 @@ package lab1
 
 import (
 	"testing"
-
+	_ "github.com/kechinvv/symbolic_execution_2024/pkg"
 	"github.com/kechinvv/go-z3/z3"
 )
 
@@ -58,7 +58,8 @@ func TestCompareAge(t *testing.T) {
 	zero_int := ctx.FromInt(0, ctx.IntSort()).(z3.Int)
 
 	//names := ctx.ConstArray(ctx.IntSort(), ctx.)
-	ages := ctx.ConstArray(ctx.IntSort(), ctx.FromInt(0, ctx.IntSort()).(z3.Int))
+	ages_sort := ctx.ArraySort(ctx.IntSort(), ctx.IntSort())
+	ages := ctx.FreshConst("people_ages_",ages_sort).(z3.Array)
 	addr_p := ctx.Const("addr_p", ctx.IntSort()).(z3.Int)
 
 	i := ctx.Const("i", ctx.IntSort()).(z3.Int)
