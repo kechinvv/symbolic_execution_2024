@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	_ "fmt"
 )
 
 func integerOperations(a int, b int) int {
