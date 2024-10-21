@@ -1,13 +1,5 @@
-github.com/aclements/go-z3 v0.0.0-20220809013456-4675d5f90ca5 h1:A27FEXOK2zSHuCwXwmPIKfrHcT+caybRGb1kaW4KOBI=
-github.com/aclements/go-z3 v0.0.0-20220809013456-4675d5f90ca5/go.mod h1:Dcqk4DTCIWIVv0jiFnYg5nnTIOWZ3JgU/mYjb5puA1s=
-github.com/kechinvv/go-z3 v0.0.0-20241012142128-dbca98fdf7bf h1:oF07T7gQYWuMU7YAZmZoRFKA0/yjJZT1M72OBSqlsG0=
-github.com/kechinvv/go-z3 v0.0.0-20241012142128-dbca98fdf7bf/go.mod h1:UMyqrEFWHQl31Ry1bABnb6n5BNppsQOPKd370NBwISs=
-github.com/kechinvv/go-z3 v0.0.0-20241013124110-7eaaad0f6274 h1:pdf09TufbmypAH6jfphU92mrpdyB4vxX4laJRYc23Eo=
-github.com/kechinvv/go-z3 v0.0.0-20241013124110-7eaaad0f6274/go.mod h1:UMyqrEFWHQl31Ry1bABnb6n5BNppsQOPKd370NBwISs=
 github.com/kechinvv/go-z3 v0.0.0-20241013133155-851effd3ad4d h1:F6LL7VxhEeSfLBN15nHJbuomoT9yMuIzSmOAbf5q+og=
 github.com/kechinvv/go-z3 v0.0.0-20241013133155-851effd3ad4d/go.mod h1:UMyqrEFWHQl31Ry1bABnb6n5BNppsQOPKd370NBwISs=
-github.com/mitchellh/go-z3 v0.0.0-20191228203228-4cbedeba863f h1:I2Rx8N5cDzVL4amj76w9F+fRS5zvZdmMyphvPMA+HJQ=
-github.com/mitchellh/go-z3 v0.0.0-20191228203228-4cbedeba863f/go.mod h1:SCzzTuqNJ1cVcftwEustt+uZcgDQhp0lJnWQPU3a3Lw=
 golang.org/x/mod v0.21.0 h1:vvrHzRwRfVKSiLrG+d4FMl/Qi4ukBCE6kZlTUkDYRT0=
 golang.org/x/mod v0.21.0/go.mod h1:6SkKJ3Xj0I0BrPOZoBy3bdMptDDU9oJrpohJ3eWZ1fY=
 golang.org/x/sync v0.8.0 h1:3NFvSEYkUoMifnESzZl15y791HH1qU2xm6eCJU5ZPXQ=
