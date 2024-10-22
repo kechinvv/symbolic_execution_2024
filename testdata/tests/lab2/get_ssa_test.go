@@ -3,13 +3,13 @@ package lab2
 import (
 	"testing"
 
-	"github.com/kechinvv/symbolic_execution_2024/pkg"
+	"github.com/kechinvv/symbolic_execution_2024/pkg/interpretator"
 )
 
 func TestGetSsaFromProg(t *testing.T) {
-	pkg.GetSsaFromProg("/home/valera/symbolic_execution_2024/testdata/data/constraints")
+	interpretator.GetSsaFromProg("/home/valera/symbolic_execution_2024/testdata/data/constraints")
 }
 
 func TestGetSsaFromFile(t *testing.T) {
-	pkg.GetSsaFromFile("/home/valera/symbolic_execution_2024/testdata/data/constraints/arrays.go")
+	interpretator.GetSsaFromFile("/home/valera/symbolic_execution_2024/testdata/data/constraints/arrays.go")
 }

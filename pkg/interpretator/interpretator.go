@@ -1,4 +1,4 @@
-package pkg
+package interpretator
 
 import (
 	"go/ast"
@@ -21,7 +21,7 @@ func GetSsaFromProg(dir string) {
 		Dir: dir,
 	}
 
-	initial, _ := packages.Load(&cfg, "./...")
+	initial, _ := packages.Load(&cfg, "./")
 
 	// Create SSA packages for well-typed packages and their dependencies.
 	prog, _ := ssautil.AllPackages(initial, 0)
@@ -53,7 +53,7 @@ func GetSsaFromProg(dir string) {
 func GetSsaFromFile(file string) {
 	// Parse the source files.
 	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, file, nil, 0xFFFF)
+	f, err := parser.ParseFile(fset, file, nil, 0)
 	if err != nil {
 		fmt.Print("ERR") // parse error
 		return
@@ -65,15 +65,18 @@ func GetSsaFromFile(file string) {
 
 	// Type-check the package, load dependencies.
 	// Create and build the SSA program.
-	hello, _, _ := ssautil.BuildPackage(
-		&types.Config{Importer: importer.Default()}, fset, pkg, files, ssa.SanityCheckFunctions)
-/* 	if err != nil {
+	prg_file, _, _ := ssautil.BuildPackage(
+		&types.Config{Importer: importer.Default()}, fset, pkg, files, 0)
+	/* 	if err != nil {
 		fmt.Print(err) // type error in some package
 		return
 	} */
 
 	// Print out the package.
-	hello.WriteTo(os.Stdout)
+	prg_file.WriteTo(os.Stdout)
 
-
+	v := VisitorSsa{}
+	v.visitPackage(prg_file)
 }
+
+
