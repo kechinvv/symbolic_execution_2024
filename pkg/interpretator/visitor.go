@@ -5,6 +5,7 @@ import (
 )
 
 type Visitor interface {
+	visitProgram(*ssa.Program)
 	visitPackage(*ssa.Package)
 	visitFunction(*ssa.Function)
 	visitBlock(*ssa.BasicBlock)
@@ -49,6 +50,13 @@ type Visitor interface {
 }
 
 type VisitorSsa struct {
+}
+
+
+func (v *VisitorSsa) visitProgram(pkg *ssa.Program) {
+	for _, el := range pkg.AllPackages() {
+		v.visitPackage(el)
+	}
 }
 
 func (v *VisitorSsa) visitPackage(pkg *ssa.Package) {

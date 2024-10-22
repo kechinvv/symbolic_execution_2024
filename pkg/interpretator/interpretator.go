@@ -6,7 +6,6 @@ import (
 	"go/parser"
 	"go/token"
 	"go/types"
-	"os"
 	"fmt"
 	
 
@@ -18,10 +17,9 @@ import (
 func GetSsaFromProg(dir string) {
 	cfg := packages.Config{
 		Mode: packages.LoadAllSyntax,
-		Dir: dir,
 	}
 
-	initial, _ := packages.Load(&cfg, "./")
+	initial, _ := packages.Load(&cfg, dir)
 
 	// Create SSA packages for well-typed packages and their dependencies.
 	prog, _ := ssautil.AllPackages(initial, 0)
@@ -40,9 +38,9 @@ func GetSsaFromProg(dir string) {
 		pkg.Build()
 		println(pkg.Pkg.Name(), " ", len(pkg.Members))
 		for _, f := range pkg.Members {
-			 v, ok := f.(*ssa.Function)
+			 _, ok := f.(*ssa.Function)
 			 if ok {
-				println(v.Name())
+				//println(v.Name())
 			}
 		}
 	}
@@ -73,7 +71,7 @@ func GetSsaFromFile(file string) {
 	} */
 
 	// Print out the package.
-	prg_file.WriteTo(os.Stdout)
+	//prg_file.WriteTo(os.Stdout)
 
 	v := VisitorSsa{}
 	v.visitPackage(prg_file)

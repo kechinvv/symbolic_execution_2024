@@ -7,7 +7,7 @@ import (
 )
 
 func TestGetSsaFromProg(t *testing.T) {
-	interpretator.GetSsaFromProg("/home/valera/symbolic_execution_2024/testdata/data/constraints")
+	interpretator.GetSsaFromProg("/home/valera/symbolic_execution_2024/...")
 }
 
 func TestGetSsaFromFile(t *testing.T) {
