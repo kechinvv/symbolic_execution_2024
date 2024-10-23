@@ -10,4 +10,5 @@ func pushPopIncrementality(j int) int {
     if result%2 == 0 {
         result++
     }
+    return result
 }

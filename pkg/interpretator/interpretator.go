@@ -1,13 +1,13 @@
 package interpretator
 
 import (
+	"fmt"
 	"go/ast"
 	"go/importer"
 	"go/parser"
 	"go/token"
 	"go/types"
-	"fmt"
-	
+	_ "os"
 
 	"golang.org/x/tools/go/packages"
 	"golang.org/x/tools/go/ssa"
@@ -30,23 +30,22 @@ func GetSsaFromProg(dir string) {
 	//callGraph := cha.CallGraph(prog)
 
 	/*
-	for f, _ := range callGraph.Nodes{
-		// f is of ssa.Function 
-		fmt.Println("func:", f, f.Name(), f.Syntax(), f.Params)
-	}*/
+		for f, _ := range callGraph.Nodes{
+			// f is of ssa.Function
+			fmt.Println("func:", f, f.Name(), f.Syntax(), f.Params)
+		}*/
 	for _, pkg := range prog.AllPackages() {
 		pkg.Build()
 		println(pkg.Pkg.Name(), " ", len(pkg.Members))
 		for _, f := range pkg.Members {
-			 _, ok := f.(*ssa.Function)
-			 if ok {
+			_, ok := f.(*ssa.Function)
+			if ok {
 				//println(v.Name())
 			}
 		}
 	}
 
 }
-
 
 func GetSsaFromFile(file string) {
 	// Parse the source files.
@@ -71,10 +70,8 @@ func GetSsaFromFile(file string) {
 	} */
 
 	// Print out the package.
-	//prg_file.WriteTo(os.Stdout)
-
-	v := VisitorSsa{}
+	/* 	prg_file.WriteTo(os.Stdout)
+	 */
+	v := VisitorSsa{make(map[int]bool)}
 	v.visitPackage(prg_file)
 }
-
-

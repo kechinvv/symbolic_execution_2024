@@ -11,5 +11,5 @@ func TestGetSsaFromProg(t *testing.T) {
 }
 
 func TestGetSsaFromFile(t *testing.T) {
-	interpretator.GetSsaFromFile("/home/valera/symbolic_execution_2024/testdata/data/constraints/arrays.go")
+	interpretator.GetSsaFromFile("/home/valera/symbolic_execution_2024/testdata/data/constraints/push_pop.go")
 }

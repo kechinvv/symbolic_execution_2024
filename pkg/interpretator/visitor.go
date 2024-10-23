@@ -47,11 +47,12 @@ type Visitor interface {
 	visitStore(*ssa.Store)
 	visitMapUpdate(*ssa.MapUpdate)
 	visitDebugRef(*ssa.DebugRef)
+	visitPhi(*ssa.Phi)
 }
 
 type VisitorSsa struct {
+	visited_blocks map[int]bool
 }
-
 
 func (v *VisitorSsa) visitProgram(pkg *ssa.Program) {
 	for _, el := range pkg.AllPackages() {
@@ -69,15 +70,20 @@ func (v *VisitorSsa) visitPackage(pkg *ssa.Package) {
 }
 
 func (v *VisitorSsa) visitFunction(fn *ssa.Function) {
-	for _, block := range fn.Blocks {
-		v.visitBlock(block)
+	println(fn.Name())
+	if fn.Blocks == nil {
+		println("external func")
+	} else {
+		v.visitBlock(fn.Blocks[0])
 	}
 }
 
 func (v *VisitorSsa) visitBlock(block *ssa.BasicBlock) {
+	v.visited_blocks[block.Index] = true
 	for _, instr := range block.Instrs {
 		v.visitInstruction(instr)
 	}
+	delete(v.visited_blocks, block.Index)
 }
 
 func (v *VisitorSsa) visitInstruction(instr ssa.Instruction) {
@@ -154,37 +160,40 @@ func (v *VisitorSsa) visitInstruction(instr ssa.Instruction) {
 		v.visitMapUpdate(val_instr)
 	case *ssa.DebugRef:
 		v.visitDebugRef(val_instr)
+	case *ssa.Phi:
+		v.visitPhi(val_instr)
 	default:
+		println(val_instr.String())
 		panic("visit not implemented node")
 	}
 }
 
 func (v *VisitorSsa) visitAlloc(alloc *ssa.Alloc) {
-	println(alloc.String())
+	println(alloc.Name(), "<---", alloc.String())
 }
 
 func (v *VisitorSsa) visitCall(call *ssa.Call) {
-	println(call.String())
+	println(call.Name(), "<---", call.String())
 }
 
 func (v *VisitorSsa) visitBinOp(binop *ssa.BinOp) {
-	println(binop.String())
+	println(binop.Name(), "<---", binop.String())
 }
 
 func (v *VisitorSsa) visitUnOp(unop *ssa.UnOp) {
-	println(unop.String())
+	println(unop.Name(), "<---", unop.String())
 }
 
 func (v *VisitorSsa) visitChangeType(changeType *ssa.ChangeType) {
-	println(changeType.String())
+	println(changeType.Name(), "<---", changeType.String())
 }
 
 func (v *VisitorSsa) visitConvert(convert *ssa.Convert) {
-	println(convert.String())
+	println(convert.Name(), "<---", convert.String())
 }
 
 func (v *VisitorSsa) visitMultiConvert(mconvert *ssa.MultiConvert) {
-	println(mconvert.String())
+	println(mconvert.Name(), "<---", mconvert.String())
 }
 
 func (v *VisitorSsa) visitChangeInterface(changeInterface *ssa.ChangeInterface) {
@@ -261,10 +270,21 @@ func (v *VisitorSsa) visitExtract(extract *ssa.Extract) {
 
 func (v *VisitorSsa) visitJump(jump *ssa.Jump) {
 	println(jump.String())
+	if _, ok := v.visited_blocks[jump.Block().Succs[0].Index]; ok {
+		println("loop")
+	} else {
+		v.visitBlock(jump.Block().Succs[0])
+	}
 }
 
 func (v *VisitorSsa) visitIf(if_cond *ssa.If) {
 	println(if_cond.String())
+	if if_cond.Block() != nil && len(if_cond.Block().Succs) == 2 {
+		tblock := if_cond.Block().Succs[0]
+		fblock := if_cond.Block().Succs[1]
+		v.visitBlock(tblock)
+		v.visitBlock(fblock)
+	}
 }
 
 func (v *VisitorSsa) visitReturn(return_stmnt *ssa.Return) {
@@ -301,4 +321,8 @@ func (v *VisitorSsa) visitMapUpdate(mapUpdate *ssa.MapUpdate) {
 
 func (v *VisitorSsa) visitDebugRef(debugRef *ssa.DebugRef) {
 	println(debugRef.String())
+}
+
+func (v *VisitorSsa) visitPhi(phi *ssa.Phi) {
+	println(phi.String())
 }
