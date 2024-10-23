@@ -14,64 +14,47 @@ import (
 	"golang.org/x/tools/go/ssa/ssautil"
 )
 
-func GetSsaFromProg(dir string) {
+func GetSsaFromProg(dir string) *ssa.Program {
 	cfg := packages.Config{
 		Mode: packages.LoadAllSyntax,
 	}
 
 	initial, _ := packages.Load(&cfg, dir)
 
-	// Create SSA packages for well-typed packages and their dependencies.
 	prog, _ := ssautil.AllPackages(initial, 0)
 
-	// Build SSA code for the whole program.
 	prog.Build()
-
-	//callGraph := cha.CallGraph(prog)
-
-	/*
-		for f, _ := range callGraph.Nodes{
-			// f is of ssa.Function
-			fmt.Println("func:", f, f.Name(), f.Syntax(), f.Params)
-		}*/
-	for _, pkg := range prog.AllPackages() {
-		pkg.Build()
-		println(pkg.Pkg.Name(), " ", len(pkg.Members))
-		for _, f := range pkg.Members {
-			_, ok := f.(*ssa.Function)
-			if ok {
-				//println(v.Name())
-			}
-		}
-	}
-
+	return prog
 }
 
-func GetSsaFromFile(file string) {
-	// Parse the source files.
+func GetSsaFromFile(file string) (*ssa.Package, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, file, nil, 0)
 	if err != nil {
-		fmt.Print("ERR") // parse error
-		return
+		fmt.Print(err) 
+		panic(err)
 	}
 	files := []*ast.File{f}
 
-	// Create the type-checker's package.
 	pkg := types.NewPackage("tmp", "")
 
-	// Type-check the package, load dependencies.
-	// Create and build the SSA program.
-	prg_file, _, _ := ssautil.BuildPackage(
+	prg_file, _, err := ssautil.BuildPackage(
 		&types.Config{Importer: importer.Default()}, fset, pkg, files, 0)
-	/* 	if err != nil {
-		fmt.Print(err) // type error in some package
-		return
-	} */
+	if err != nil {
+		fmt.Print(err) 
+		panic(err)
+	} 
+	return prg_file, err
+}
 
-	// Print out the package.
-	/* 	prg_file.WriteTo(os.Stdout)
-	 */
-	v := VisitorSsa{make(map[int]bool)}
-	v.visitPackage(prg_file)
+func RunStatSymbolExecForFile(file_path string) {
+	pkg, _ := GetSsaFromFile(file_path)
+	v := NewVisitorSsa()
+	v.visitPackage(pkg)
+}
+
+func RunStatSymbolExecForProgram(prg_path string) {
+	prg := GetSsaFromProg(prg_path)
+	v := NewVisitorSsa()
+	v.visitProgram(prg)
 }

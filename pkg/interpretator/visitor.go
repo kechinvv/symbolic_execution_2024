@@ -1,6 +1,7 @@
 package interpretator
 
 import (
+	"github.com/kechinvv/go-z3/z3"
 	"golang.org/x/tools/go/ssa"
 )
 
@@ -52,6 +53,15 @@ type Visitor interface {
 
 type VisitorSsa struct {
 	visited_blocks map[int]bool
+	ctx            *z3.Context
+	s              *z3.Solver
+}
+
+func NewVisitorSsa() *VisitorSsa {
+	config := z3.NewContextConfig()
+	ctx := z3.NewContext(config)
+	s := z3.NewSolver(ctx)
+	return &VisitorSsa{map[int]bool{}, ctx, s}
 }
 
 func (v *VisitorSsa) visitProgram(pkg *ssa.Program) {
