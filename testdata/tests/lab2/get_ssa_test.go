@@ -7,9 +7,9 @@ import (
 )
 
 func TestGetSsaFromProg(t *testing.T) {
-	interpretator.GetSsaFromProg("/home/valera/symbolic_execution_2024/...")
+	interpretator.RunStatSymbolExecForFile("/home/valera/symbolic_execution_2024/...")
 }
 
 func TestGetSsaFromFile(t *testing.T) {
-	interpretator.RunStatSymbolExecForFile("/home/valera/symbolic_execution_2024/testdata/data/constraints/numbers.go")
+	interpretator.RunStatSymbolExecForFile("/home/valera/symbolic_execution_2024/testdata/data/constraints/push_pop.go")
 }

@@ -31,7 +31,7 @@ func GetSsaFromFile(file string) (*ssa.Package, error) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, file, nil, 0)
 	if err != nil {
-		fmt.Print(err) 
+		fmt.Print(err)
 		panic(err)
 	}
 	files := []*ast.File{f}
@@ -41,20 +41,20 @@ func GetSsaFromFile(file string) (*ssa.Package, error) {
 	prg_file, _, err := ssautil.BuildPackage(
 		&types.Config{Importer: importer.Default()}, fset, pkg, files, 0)
 	if err != nil {
-		fmt.Print(err) 
+		fmt.Print(err)
 		panic(err)
-	} 
+	}
 	return prg_file, err
 }
 
 func RunStatSymbolExecForFile(file_path string) {
 	pkg, _ := GetSsaFromFile(file_path)
-	v := NewVisitorSsa()
+	v := NewIntraVisitorSsa()
 	v.visitPackage(pkg)
 }
 
 func RunStatSymbolExecForProgram(prg_path string) {
 	prg := GetSsaFromProg(prg_path)
-	v := NewVisitorSsa()
+	v := NewIntraVisitorSsa()
 	v.visitProgram(prg)
 }
