@@ -286,10 +286,11 @@ func (v *IntraVisitorSsa) visitExtract(extract *ssa.Extract) {
 func (v *IntraVisitorSsa) visitJump(jump *ssa.Jump) {
 	println(jump.String())
 	jump_to := jump.Block().Succs[0].Index
-	if isPred(jump_to, jump.Block().Preds) {
+/* 	if isPred(jump_to, jump.Block().Preds) {
 		println("loop")
-	} else if _, ok := v.visited_blocks[jump_to]; ok {
-		println("visited")
+	} else  */
+	if _, ok := v.visited_blocks[jump_to]; ok {   //Faster than computing 
+		println("loop")
 	} else {
 		v.visitBlock(jump.Block().Succs[0])
 	}
