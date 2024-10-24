@@ -1,3 +1,5 @@
+package main
+
 func pushPopIncrementality(j int) int {
     result := j
 
@@ -8,4 +10,5 @@ func pushPopIncrementality(j int) int {
     if result%2 == 0 {
         result++
     }
+    return result
 }
