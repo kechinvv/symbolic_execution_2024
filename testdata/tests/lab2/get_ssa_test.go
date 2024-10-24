@@ -11,5 +11,5 @@ func TestGetSsaFromProg(t *testing.T) {
 }
 
 func TestGetSsaFromFile(t *testing.T) {
-	interpretator.RunStatSymbolExecForFile("/home/valera/symbolic_execution_2024/testdata/data/constraints/push_pop.go")
+	interpretator.RunStatSymbolExecForFile("/home/valera/symbolic_execution_2024/testdata/data/constraints/numbers.go")
 }

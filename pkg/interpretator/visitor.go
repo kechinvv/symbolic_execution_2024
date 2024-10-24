@@ -1,6 +1,7 @@
 package interpretator
 
 import (
+	"container/list"
 	"strconv"
 
 	"github.com/kechinvv/go-z3/z3"
@@ -54,17 +55,18 @@ type Visitor interface {
 }
 
 type IntraVisitorSsa struct {
-	visited_blocks map[int]bool
-	ctx            *z3.Context
-	s              *z3.Solver
-	reg_aliases    map[string]string
+	visited_blocks      map[int]bool
+	ctx                 *z3.Context
+	s                   *z3.Solver
+	reg_aliases         map[string]string
+	general_block_stack list.List
 }
 
 func NewIntraVisitorSsa() *IntraVisitorSsa {
 	config := z3.NewContextConfig()
 	ctx := z3.NewContext(config)
 	s := z3.NewSolver(ctx)
-	return &IntraVisitorSsa{map[int]bool{}, ctx, s, map[string]string{}}
+	return &IntraVisitorSsa{map[int]bool{}, ctx, s, map[string]string{}, list.List{}}
 }
 
 func (v *IntraVisitorSsa) visitProgram(pkg *ssa.Program) {
@@ -94,6 +96,10 @@ func (v *IntraVisitorSsa) visitFunction(fn *ssa.Function) {
 }
 
 func (v *IntraVisitorSsa) visitBlock(block *ssa.BasicBlock) {
+	if v.general_block_stack.Back() != nil && block.Index == v.general_block_stack.Back().Value.(*ssa.BasicBlock).Index {
+		println("next block is general")
+		return
+	}
 	v.visited_blocks[block.Index] = true
 	for _, instr := range block.Instrs {
 		v.visitInstruction(instr)
@@ -284,12 +290,12 @@ func (v *IntraVisitorSsa) visitExtract(extract *ssa.Extract) {
 }
 
 func (v *IntraVisitorSsa) visitJump(jump *ssa.Jump) {
-	println(jump.String())
+	println(jump.String(), " ", jump.Block().Index)
 	jump_to := jump.Block().Succs[0].Index
-/* 	if isPred(jump_to, jump.Block().Preds) {
+	/* 	if isPred(jump_to, jump.Block().Preds) {
 		println("loop")
 	} else  */
-	if _, ok := v.visited_blocks[jump_to]; ok {   //Faster than computing 
+	if _, ok := v.visited_blocks[jump_to]; ok { //Faster than computing
 		println("loop")
 	} else {
 		v.visitBlock(jump.Block().Succs[0])
@@ -302,9 +308,20 @@ func (v *IntraVisitorSsa) visitIf(if_cond *ssa.If) {
 
 		tblock := if_cond.Block().Succs[0]
 		fblock := if_cond.Block().Succs[1]
-
+		next := getGeneralSuccBlock(tblock, fblock)
+		if next != nil {
+			v.general_block_stack.PushBack(next)
+		}
 		v.visitBlock(tblock)
 		v.visitBlock(fblock)
+		//todo: fomula concatination with || for if results
+		if next != nil {
+			v.general_block_stack.Remove(v.general_block_stack.Back())
+			println("general block:", next.Index)
+			v.visitBlock(next)
+		} else {
+			println("nil general block")
+		}
 	}
 }
 
