@@ -3,10 +3,12 @@ package pkg
 import "github.com/kechinvv/go-z3/z3"
 
 type SORT_NAME = string
+
 const (
 	SORT_INT SORT_NAME = "int" 
-	SORT_FLOAT32 SORT_NAME = "float64" 
-	SORT_FLOAT64 SORT_NAME = "float32" 
+	SORT_UINT SORT_NAME = "uint" 
+	SORT_FLOAT32 SORT_NAME = "float32" 
+	SORT_FLOAT64 SORT_NAME = "float64" 
 	SORT_BOOL SORT_NAME = "bool" 
 )
 var PrimitiveSorts = [...]SORT_NAME{SORT_INT, SORT_FLOAT32, SORT_FLOAT64, SORT_BOOL}
