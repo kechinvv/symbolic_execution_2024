@@ -330,7 +330,7 @@ func (v *IntraVisitorSsa) visitBinOp(binop *ssa.BinOp) z3.Bool {
 			return res.(z3.Float).Eq(tx.Add(y.(z3.Float)))
 		case z3.Uninterpreted:
 			println(binop.Type().String())
-			//todo something like if builin type: x.getField(...) and custom operation rules
+			//todo something like if builin type: real(cmplx) + ... 
 			panic("impossible op for this type")
 		default:
 			panic("impossible op for this type")
