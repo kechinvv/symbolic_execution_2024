@@ -214,16 +214,6 @@ func (v *IntraVisitorSsa) visitInstruction(instr ssa.Instruction) z3.Bool {
 	}
 }
 
-func (v *IntraVisitorSsa) visitAlloc(alloc *ssa.Alloc) z3.Bool {
-	println(alloc.Name(), "<---", alloc.String())
-	return v.stub
-}
-
-func (v *IntraVisitorSsa) visitCall(call *ssa.Call) z3.Bool {
-	println(call.Name(), "<---", call.String())
-	return v.stub
-}
-
 func (v *IntraVisitorSsa) parseValue(value ssa.Value) z3.Value {
 	res, ok := v.mem.Variables[value.Name()]
 	if ok {
@@ -243,7 +233,7 @@ func (v *IntraVisitorSsa) visitValue(value ssa.Value) z3.Value {
 }
 
 func (v *IntraVisitorSsa) visitParameter(param *ssa.Parameter) {
-	println(param.Name(), param.Type().String())
+	println(param.Name(), param.Type().Underlying().String())
 	v.mem.AddVariable(param.Name(), param.Type().String(), v.ctx)
 }
 
@@ -285,6 +275,43 @@ func (v *IntraVisitorSsa) visitConst(const_value *ssa.Const) z3.Value {
 	}
 }
 
+func (v *IntraVisitorSsa) visitAlloc(alloc *ssa.Alloc) z3.Bool {
+	println(alloc.Name(), "<---", alloc.String())
+	return v.stub
+}
+
+func (v *IntraVisitorSsa) visitCall(call *ssa.Call) z3.Bool {
+	println(call.Name(), "<---", call.String())
+
+	res := v.mem.AddVariable(call.Name(), call.Type().String(), v.ctx)
+
+	args_len := len(call.Call.Args)
+	args_types := make([]string, args_len)
+	args := make([]z3.Value, args_len)
+	for i, a := range call.Call.Args {
+		args_types[i] = a.Type().String()
+		args[i] = v.parseValue(a)
+	}
+
+	func_decl, ok := v.mem.Functions[call.Call.Value.Name()]
+	if !ok {
+		func_decl = v.mem.AddFunction(call.Call.Value.Name(), args_types, call.Type().String(), v.ctx)
+	}
+
+	switch tres := res.(type) {
+	case z3.BV:
+		return tres.Eq(func_decl.Apply(args...).(z3.BV))
+	case z3.Float:
+		return tres.Eq(func_decl.Apply(args...).(z3.Float))
+	case z3.Bool:
+		return tres.Eq(func_decl.Apply(args...).(z3.Bool))
+	case z3.Uninterpreted:
+		return tres.Eq(func_decl.Apply(args...).(z3.Uninterpreted))
+	default:
+		panic("unknown type")
+	}
+}
+
 func (v *IntraVisitorSsa) visitBinOp(binop *ssa.BinOp) z3.Bool {
 	println(binop.Name(), "<---", binop.String())
 	x := v.parseValue(binop.X)
@@ -296,11 +323,15 @@ func (v *IntraVisitorSsa) visitBinOp(binop *ssa.BinOp) z3.Bool {
 	}
 	switch binop.Op {
 	case token.ADD:
-		switch x.(type) {
+		switch tx := x.(type) {
 		case z3.BV:
-			return res.(z3.BV).Eq(x.(z3.BV).Add(y.(z3.BV)))
+			return res.(z3.BV).Eq(tx.Add(y.(z3.BV)))
 		case z3.Float:
-			return res.(z3.Float).Eq(x.(z3.Float).Add(y.(z3.Float)))
+			return res.(z3.Float).Eq(tx.Add(y.(z3.Float)))
+		case z3.Uninterpreted:
+			println(binop.Type().String())
+			//todo something like if builin type: x.getField(...) and custom operation rules
+			panic("impossible op for this type")
 		default:
 			panic("impossible op for this type")
 		}
