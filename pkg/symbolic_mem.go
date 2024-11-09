@@ -43,6 +43,14 @@ func NewSymbolicMem() SymbolicMem {
 	}
 }
 
+func (mem *SymbolicMem) GetFuncOrCreate(name string, arg_types []SORT_NAME, result_type SORT_NAME, ctx *z3.Context) z3.FuncDecl {
+	func_decl, ok := mem.Functions[name]
+	if !ok {
+		func_decl = mem.AddFunction(name, arg_types, result_type, ctx)
+	}
+	return func_decl
+}
+
 func (mem *SymbolicMem) GetTypeOrCreate(type_name string, ctx *z3.Context) SymbolicType {
 	res_sort, ok := mem.Sorts[type_name]
 	if !ok {

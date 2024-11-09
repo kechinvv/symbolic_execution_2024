@@ -293,10 +293,8 @@ func (v *IntraVisitorSsa) visitCall(call *ssa.Call) z3.Bool {
 		args[i] = v.parseValue(a)
 	}
 
-	func_decl, ok := v.mem.Functions[call.Call.Value.Name()]
-	if !ok {
-		func_decl = v.mem.AddFunction(call.Call.Value.Name(), args_types, call.Type().String(), v.ctx)
-	}
+	func_decl := v.mem.GetFuncOrCreate(call.Call.Value.Name(), args_types, call.Type().String(), v.ctx)
+
 
 	switch tres := res.(type) {
 	case z3.BV:
@@ -329,36 +327,76 @@ func (v *IntraVisitorSsa) visitBinOp(binop *ssa.BinOp) z3.Bool {
 		case z3.Float:
 			return res.(z3.Float).Eq(tx.Add(y.(z3.Float)))
 		case z3.Uninterpreted:
-			println(binop.Type().String())
-			//todo something like if builin type: real(cmplx) + ... 
-			panic("impossible op for this type")
+			switch binop.Type().String() {
+			case "complex128":
+				real_func := v.mem.GetFuncOrCreate("real", []string{"complex128"}, "float64", v.ctx )
+				imag_func := v.mem.GetFuncOrCreate("imag", []string{"complex128"}, "float64", v.ctx )
+				real_sum := real_func.Apply(tx).(z3.Float).Add(real_func.Apply(y).(z3.Float))
+				imag_sum := imag_func.Apply(tx).(z3.Float).Add(imag_func.Apply(y).(z3.Float))
+				return real_func.Apply(res).(z3.Float).Eq(real_sum).And(imag_func.Apply(res).(z3.Float).Eq(imag_sum))
+			default:
+				panic("impossible op for this type")
+			}
 		default:
 			panic("impossible op for this type")
 		}
 	case token.SUB:
-		switch x.(type) {
+		switch tx := x.(type) {
 		case z3.BV:
-			return res.(z3.BV).Eq(x.(z3.BV).Sub(y.(z3.BV)))
+			return res.(z3.BV).Eq(tx.Sub(y.(z3.BV)))
 		case z3.Float:
-			return res.(z3.Float).Eq(x.(z3.Float).Sub(y.(z3.Float)))
+			return res.(z3.Float).Eq(tx.Sub(y.(z3.Float)))
+		case z3.Uninterpreted:
+			switch binop.Type().String() {
+			case "complex128":
+				real_func := v.mem.GetFuncOrCreate("real", []string{"complex128"}, "float64", v.ctx )
+				imag_func := v.mem.GetFuncOrCreate("imag", []string{"complex128"}, "float64", v.ctx )
+				real_sum := real_func.Apply(tx).(z3.Float).Sub(real_func.Apply(y).(z3.Float))
+				imag_sum := imag_func.Apply(tx).(z3.Float).Sub(imag_func.Apply(y).(z3.Float))
+				return real_func.Apply(res).(z3.Float).Eq(real_sum).And(imag_func.Apply(res).(z3.Float).Eq(imag_sum))
+			default:
+				panic("impossible op for this type")
+			}
 		default:
 			panic("impossible op for this type")
 		}
 	case token.MUL:
-		switch x.(type) {
+		switch tx := x.(type) {
 		case z3.BV:
-			return res.(z3.BV).Eq(x.(z3.BV).Mul(y.(z3.BV)))
+			return res.(z3.BV).Eq(tx.Mul(y.(z3.BV)))
 		case z3.Float:
-			return res.(z3.Float).Eq(x.(z3.Float).Mul(y.(z3.Float)))
+			return res.(z3.Float).Eq(tx.Mul(y.(z3.Float)))
+		case z3.Uninterpreted:
+			switch binop.Type().String() {
+			case "complex128":
+				real_func := v.mem.GetFuncOrCreate("real", []string{"complex128"}, "float64", v.ctx )
+				imag_func := v.mem.GetFuncOrCreate("imag", []string{"complex128"}, "float64", v.ctx )
+				real_sum := real_func.Apply(tx).(z3.Float).Mul(real_func.Apply(y).(z3.Float))
+				imag_sum := imag_func.Apply(tx).(z3.Float).Mul(imag_func.Apply(y).(z3.Float))
+				return real_func.Apply(res).(z3.Float).Eq(real_sum).And(imag_func.Apply(res).(z3.Float).Eq(imag_sum))
+			default:
+				panic("impossible op for this type")
+			}
 		default:
 			panic("impossible op for this type")
 		}
 	case token.QUO:
-		switch x.(type) {
+		switch tx := x.(type) {
 		case z3.BV:
-			return res.(z3.BV).Eq(x.(z3.BV).SDiv(y.(z3.BV)))
+			return res.(z3.BV).Eq(tx.SDiv(y.(z3.BV)))
 		case z3.Float:
-			return res.(z3.Float).Eq(x.(z3.Float).Div(y.(z3.Float)))
+			return res.(z3.Float).Eq(tx.Div(y.(z3.Float)))
+		case z3.Uninterpreted:
+			switch binop.Type().String() {
+			case "complex128":
+				real_func := v.mem.GetFuncOrCreate("real", []string{"complex128"}, "float64", v.ctx )
+				imag_func := v.mem.GetFuncOrCreate("imag", []string{"complex128"}, "float64", v.ctx )
+				real_sum := real_func.Apply(tx).(z3.Float).Div(real_func.Apply(y).(z3.Float))
+				imag_sum := imag_func.Apply(tx).(z3.Float).Div(imag_func.Apply(y).(z3.Float))
+				return real_func.Apply(res).(z3.Float).Eq(real_sum).And(imag_func.Apply(res).(z3.Float).Eq(imag_sum))
+			default:
+				panic("impossible op for this type")
+			}
 		default:
 			panic("impossible op for this type")
 		}
