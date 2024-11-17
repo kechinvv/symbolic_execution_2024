@@ -5,16 +5,17 @@ import (
 )
 
 type SymbolicMem struct {
-	Sorts     map[SORT_NAME]SymbolicType
-	Variables map[string]z3.Value
+	Sorts     map[SORT_NAME]*SymbolicType
+	Variables map[string]*SymbolicVar
 	Functions map[string]z3.FuncDecl
 }
 
 type SymbolicType struct {
 	Sort_name SORT_NAME
 	Sort_obj  z3.Sort
-	Fileds    map[SORT_NAME]SymbolicField
+	Fields    map[SORT_NAME]*SymbolicField
 	SymMem    *SymbolicMem
+	Arrays    z3.Array
 }
 
 type SymbolicField struct {
@@ -37,8 +38,8 @@ type SymbolicObject struct {
 
 func NewSymbolicMem() SymbolicMem {
 	return SymbolicMem{
-		Sorts:     make(map[SORT_NAME]SymbolicType),
-		Variables: make(map[string]z3.Value),
+		Sorts:     make(map[SORT_NAME]*SymbolicType),
+		Variables: make(map[string]*SymbolicVar),
 		Functions: make(map[string]z3.FuncDecl),
 	}
 }
@@ -51,7 +52,7 @@ func (mem *SymbolicMem) GetFuncOrCreate(name string, arg_types []SORT_NAME, resu
 	return func_decl
 }
 
-func (mem *SymbolicMem) GetTypeOrCreate(type_name string, ctx *z3.Context) SymbolicType {
+func (mem *SymbolicMem) GetTypeOrCreate(type_name string, ctx *z3.Context) *SymbolicType {
 	res_sort, ok := mem.Sorts[type_name]
 	if !ok {
 		res_sort = mem.AddType(type_name, make(map[string]SORT_NAME), ctx)
@@ -71,52 +72,63 @@ func (mem *SymbolicMem) AddFunction(name string, arg_types []SORT_NAME, result_t
 	return f_decl
 }
 
-func (mem *SymbolicMem) AddVariable(name string, typ SORT_NAME, ctx *z3.Context) z3.Value {
+func (mem *SymbolicMem) AddVariable(name string, typ SORT_NAME, ctx *z3.Context) *SymbolicVar {
+	sort := mem.GetTypeOrCreate(typ, ctx)
 	switch typ {
 	case SORT_INT:
-		mem.Variables[name] = ctx.Const(name, ctx.BVSort(64))
+		mem.Variables[name] = &SymbolicVar{ctx.Const(name, ctx.BVSort(64)), sort, false, false, false}
 	case SORT_FLOAT32:
-		mem.Variables[name] = ctx.Const(name, ctx.FloatSort(8, 24))
+		mem.Variables[name] = &SymbolicVar{ctx.Const(name, ctx.FloatSort(8, 24)), sort, false, false, false}
 	case SORT_FLOAT64:
-		mem.Variables[name] = ctx.Const(name, ctx.FloatSort(11, 53))
+		mem.Variables[name] = &SymbolicVar{ctx.Const(name, ctx.FloatSort(11, 53)), sort, false, false, false}
 	case SORT_BOOL:
-		mem.Variables[name] = ctx.Const(name, ctx.BoolSort())
+		mem.Variables[name] = &SymbolicVar{ctx.Const(name, ctx.BoolSort()), sort, false, false, false}
+	case SORT_COMPLEX128:
+		mem.Variables[name] = &SymbolicVar{ctx.Const(name, ctx.UninterpretedSort(SORT_COMPLEX128)), sort, false, false, false}
 	default:
-		st := mem.GetTypeOrCreate(typ, ctx)
-		mem.Variables[name] = ctx.Const(name, st.Sort_obj)
+		if len(typ) > 2 && string(typ[0:1]) == "[]" {
+			// todo: resolve matrix 
+			arr_sort := ctx.ArraySort(ctx.BVSort(64), ctx.BVSort(64))
+			mem.Variables[name] = &SymbolicVar{ctx.Const(name, arr_sort), sort, false, false, true}
+		} else {
+			// todo: resolve sequence of dereference 
+			mem.Variables[name] = &SymbolicVar{ctx.Const(name, ctx.IntSort()), sort, false, true, false}
+		}
 	}
 	return mem.Variables[name]
 }
 
-func (s *SymbolicMem) AddType(name SORT_NAME, fields map[string]SORT_NAME, ctx *z3.Context) SymbolicType {
-	sum_fields := make(map[string]SymbolicField)
+func (s *SymbolicMem) AddType(name SORT_NAME, fields map[string]SORT_NAME, ctx *z3.Context) *SymbolicType {
+	sum_fields := make(map[string]*SymbolicField)
+	a_sort := ctx.ArraySort(ctx.IntSort(), ctx.IntSort())
 	sym_type := SymbolicType{
 		Sort_name: name,
 		Sort_obj:  GetSortByName(ctx, name),
-		Fileds:    sum_fields,
+		Fields:    sum_fields,
 		SymMem:    s,
+		Arrays:    ctx.Const("array"+":"+name+":"+"mem", a_sort).(z3.Array),
 	}
 
 	for f_name, f_sort_name := range fields {
 		sym_type.addField(f_name, f_sort_name, ctx)
 	}
 
-	s.Sorts[name] = sym_type
-	return sym_type
+	s.Sorts[name] = &sym_type
+	return &sym_type
 }
 
-func (t *SymbolicType) addField(field_name string, field_sort SORT_NAME, ctx *z3.Context) SymbolicField {
+func (t *SymbolicType) addField(field_name string, field_sort SORT_NAME, ctx *z3.Context) *SymbolicField {
 	f_sort := t.SymMem.GetTypeOrCreate(field_sort, ctx).Sort_obj
 
 	a_sort := ctx.ArraySort(ctx.IntSort(), f_sort)
 
-	t.Fileds[field_name] = SymbolicField{
+	t.Fields[field_name] = &SymbolicField{
 		Sort_name: field_sort,
 		Array:     ctx.Const(t.Sort_name+":"+field_name+":mem", a_sort).(z3.Array),
 		SymMem:    t.SymMem,
 	}
 
-	return t.Fileds[field_name]
+	return t.Fields[field_name]
 }
 
 func NewSymbolicArray(name string, sym_type *SymbolicType, ctx *z3.Context) SymbolicArray {
@@ -156,7 +168,7 @@ func (t *SymbolicType) AllocObject(init_var_name string, ctx *z3.Context) Symbol
 }
 
 func (o *SymbolicObject) assignFieldToValue(field_name string, field_sort SORT_NAME, variable z3.Value, ctx *z3.Context) SymbolicObject {
-	field, ok := o.SymType.Fileds[field_name]
+	field, ok := o.SymType.Fields[field_name]
 	if !ok {
 		field = o.SymType.addField(field_name, field_sort, ctx)
 	}
@@ -179,8 +191,28 @@ func (o *SymbolicObject) assignFieldToValue(field_name string, field_sort SORT_N
 	obj_type := field.SymMem.GetTypeOrCreate(field_sort, ctx)
 
 	return SymbolicObject{
-		SymType: &obj_type,
+		SymType: obj_type,
 		Pointer: pointer,
 		Assert:  o.Assert.And(assert),
+	}
+}
+
+type SymbolicVar struct {
+	Value       z3.Value
+	Sort        *SymbolicType
+	IsGoPointer bool
+	IsStruct    bool
+	IsArray     bool
+}
+
+func (v SymbolicVar) GetValue() z3.Value {
+	if v.IsGoPointer {
+		if v.IsArray {
+			return v.Sort.Arrays.Select(v.Value).(z3.Array)
+		} else {
+			return v.Value
+		}
+	} else {
+		return v.Value
 	}
 }

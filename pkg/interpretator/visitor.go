@@ -100,7 +100,13 @@ func (v *IntraVisitorSsa) visitPackage(pkg *ssa.Package) {
 
 func (v *IntraVisitorSsa) visitFunction(fn *ssa.Function) z3.Bool {
 	println(fn.Name())
-	v.mem.Variables = make(map[string]z3.Value)
+
+	//remove this
+/* 	if fn.Name() == "compareElement" {
+		return v.stub
+	}
+ */
+	v.mem.Variables = make(map[string]*sym_mem.SymbolicVar)
 	for _, param := range fn.Params {
 		v.visitParameter(param)
 	}
@@ -214,7 +220,7 @@ func (v *IntraVisitorSsa) visitInstruction(instr ssa.Instruction) z3.Bool {
 	}
 }
 
-func (v *IntraVisitorSsa) parseValue(value ssa.Value) z3.Value {
+func (v *IntraVisitorSsa) parseValue(value ssa.Value) *sym_mem.SymbolicVar {
 	res, ok := v.mem.Variables[value.Name()]
 	if ok {
 		return res
@@ -223,7 +229,7 @@ func (v *IntraVisitorSsa) parseValue(value ssa.Value) z3.Value {
 	}
 }
 
-func (v *IntraVisitorSsa) visitValue(value ssa.Value) z3.Value {
+func (v *IntraVisitorSsa) visitValue(value ssa.Value) *sym_mem.SymbolicVar {
 	switch tvalue := value.(type) {
 	case *ssa.Const:
 		return v.visitConst(tvalue)
@@ -237,7 +243,7 @@ func (v *IntraVisitorSsa) visitParameter(param *ssa.Parameter) {
 	v.mem.AddVariable(param.Name(), param.Type().String(), v.ctx)
 }
 
-func (v *IntraVisitorSsa) visitConst(const_value *ssa.Const) z3.Value {
+func (v *IntraVisitorSsa) visitConst(const_value *ssa.Const) *sym_mem.SymbolicVar {
 	str_const := const_value.Value.ExactString()
 	switch const_value.Type().String() {
 	case sym_mem.SORT_BOOL:
@@ -245,31 +251,31 @@ func (v *IntraVisitorSsa) visitConst(const_value *ssa.Const) z3.Value {
 		if err != nil {
 			panic("error parse bool")
 		}
-		return v.ctx.FromBool(b)
+		return &sym_mem.SymbolicVar{v.ctx.FromBool(b), nil, false, false, false}
 	case sym_mem.SORT_INT:
 		b, err := strconv.Atoi(str_const)
 		if err != nil {
 			panic("error parse int")
 		}
-		return v.ctx.FromInt(int64(b), v.ctx.BVSort(64))
+		return &sym_mem.SymbolicVar{v.ctx.FromInt(int64(b), v.ctx.BVSort(64)), nil, false, false, false}
 	case sym_mem.SORT_UINT:
 		b, err := strconv.ParseUint(str_const, 10, 64)
 		if err != nil {
 			panic("error parse int")
 		}
-		return v.ctx.FromInt(int64(b), v.ctx.BVSort(bits.UintSize))
+		return &sym_mem.SymbolicVar{v.ctx.FromInt(int64(b), v.ctx.BVSort(bits.UintSize)), nil, false, false, false}
 	case sym_mem.SORT_FLOAT32:
 		b, err := strconv.ParseFloat(str_const, 32)
 		if err != nil {
 			panic("error parse float32")
 		}
-		return v.ctx.FromFloat32(float32(b), v.ctx.FloatSort(8, 24))
+		return &sym_mem.SymbolicVar{v.ctx.FromFloat32(float32(b), v.ctx.FloatSort(8, 24)), nil, false, false, false}
 	case sym_mem.SORT_FLOAT64:
 		b, err := strconv.ParseFloat(str_const, 64)
 		if err != nil {
 			panic("error parse float64")
 		}
-		return v.ctx.FromFloat64(b, v.ctx.FloatSort(11, 53))
+		return &sym_mem.SymbolicVar{v.ctx.FromFloat64(b, v.ctx.FloatSort(11, 53)), nil, false, false, false}
 	default:
 		panic("unsupported type " + const_value.Type().String())
 	}
@@ -290,13 +296,13 @@ func (v *IntraVisitorSsa) visitCall(call *ssa.Call) z3.Bool {
 	args := make([]z3.Value, args_len)
 	for i, a := range call.Call.Args {
 		args_types[i] = a.Type().String()
-		args[i] = v.parseValue(a)
+		args[i] = v.parseValue(a).GetValue()
 	}
 
 	func_decl := v.mem.GetFuncOrCreate(call.Call.Value.Name(), args_types, call.Type().String(), v.ctx)
 
 
-	switch tres := res.(type) {
+	switch tres := res.GetValue().(type) {
 	case z3.BV:
 		return tres.Eq(func_decl.Apply(args...).(z3.BV))
 	case z3.Float:
@@ -305,6 +311,8 @@ func (v *IntraVisitorSsa) visitCall(call *ssa.Call) z3.Bool {
 		return tres.Eq(func_decl.Apply(args...).(z3.Bool))
 	case z3.Uninterpreted:
 		return tres.Eq(func_decl.Apply(args...).(z3.Uninterpreted))
+	case z3.Int:
+		return tres.Eq(func_decl.Apply(args...).(z3.Int))
 	default:
 		panic("unknown type")
 	}
@@ -312,9 +320,10 @@ func (v *IntraVisitorSsa) visitCall(call *ssa.Call) z3.Bool {
 
 func (v *IntraVisitorSsa) visitBinOp(binop *ssa.BinOp) z3.Bool {
 	println(binop.Name(), "<---", binop.String())
-	x := v.parseValue(binop.X)
-	y := v.parseValue(binop.Y)
+	x := v.parseValue(binop.X).GetValue()
+	y := v.parseValue(binop.Y).GetValue()
 	res := v.mem.AddVariable(binop.Name(), binop.Type().String(), v.ctx)
+	res_v := res.GetValue()
 
 	if x.Sort().Kind() != y.Sort().Kind() {
 		panic("dif types in one bin op " + x.Sort().Kind().String() + " " + y.Sort().Kind().String())
@@ -323,9 +332,9 @@ func (v *IntraVisitorSsa) visitBinOp(binop *ssa.BinOp) z3.Bool {
 	case token.ADD:
 		switch tx := x.(type) {
 		case z3.BV:
-			return res.(z3.BV).Eq(tx.Add(y.(z3.BV)))
+			return res_v.(z3.BV).Eq(tx.Add(y.(z3.BV)))
 		case z3.Float:
-			return res.(z3.Float).Eq(tx.Add(y.(z3.Float)))
+			return res_v.(z3.Float).Eq(tx.Add(y.(z3.Float)))
 		case z3.Uninterpreted:
 			switch binop.Type().String() {
 			case "complex128":
@@ -333,7 +342,7 @@ func (v *IntraVisitorSsa) visitBinOp(binop *ssa.BinOp) z3.Bool {
 				imag_func := v.mem.GetFuncOrCreate("imag", []string{"complex128"}, "float64", v.ctx )
 				real_sum := real_func.Apply(tx).(z3.Float).Add(real_func.Apply(y).(z3.Float))
 				imag_sum := imag_func.Apply(tx).(z3.Float).Add(imag_func.Apply(y).(z3.Float))
-				return real_func.Apply(res).(z3.Float).Eq(real_sum).And(imag_func.Apply(res).(z3.Float).Eq(imag_sum))
+				return real_func.Apply(res_v).(z3.Float).Eq(real_sum).And(imag_func.Apply(res_v).(z3.Float).Eq(imag_sum))
 			default:
 				panic("impossible op for this type")
 			}
@@ -343,9 +352,9 @@ func (v *IntraVisitorSsa) visitBinOp(binop *ssa.BinOp) z3.Bool {
 	case token.SUB:
 		switch tx := x.(type) {
 		case z3.BV:
-			return res.(z3.BV).Eq(tx.Sub(y.(z3.BV)))
+			return res_v.(z3.BV).Eq(tx.Sub(y.(z3.BV)))
 		case z3.Float:
-			return res.(z3.Float).Eq(tx.Sub(y.(z3.Float)))
+			return res_v.(z3.Float).Eq(tx.Sub(y.(z3.Float)))
 		case z3.Uninterpreted:
 			switch binop.Type().String() {
 			case "complex128":
@@ -353,7 +362,7 @@ func (v *IntraVisitorSsa) visitBinOp(binop *ssa.BinOp) z3.Bool {
 				imag_func := v.mem.GetFuncOrCreate("imag", []string{"complex128"}, "float64", v.ctx )
 				real_sum := real_func.Apply(tx).(z3.Float).Sub(real_func.Apply(y).(z3.Float))
 				imag_sum := imag_func.Apply(tx).(z3.Float).Sub(imag_func.Apply(y).(z3.Float))
-				return real_func.Apply(res).(z3.Float).Eq(real_sum).And(imag_func.Apply(res).(z3.Float).Eq(imag_sum))
+				return real_func.Apply(res_v).(z3.Float).Eq(real_sum).And(imag_func.Apply(res_v).(z3.Float).Eq(imag_sum))
 			default:
 				panic("impossible op for this type")
 			}
@@ -363,9 +372,9 @@ func (v *IntraVisitorSsa) visitBinOp(binop *ssa.BinOp) z3.Bool {
 	case token.MUL:
 		switch tx := x.(type) {
 		case z3.BV:
-			return res.(z3.BV).Eq(tx.Mul(y.(z3.BV)))
+			return res_v.(z3.BV).Eq(tx.Mul(y.(z3.BV)))
 		case z3.Float:
-			return res.(z3.Float).Eq(tx.Mul(y.(z3.Float)))
+			return res_v.(z3.Float).Eq(tx.Mul(y.(z3.Float)))
 		case z3.Uninterpreted:
 			switch binop.Type().String() {
 			case "complex128":
@@ -373,7 +382,7 @@ func (v *IntraVisitorSsa) visitBinOp(binop *ssa.BinOp) z3.Bool {
 				imag_func := v.mem.GetFuncOrCreate("imag", []string{"complex128"}, "float64", v.ctx )
 				real_sum := real_func.Apply(tx).(z3.Float).Mul(real_func.Apply(y).(z3.Float))
 				imag_sum := imag_func.Apply(tx).(z3.Float).Mul(imag_func.Apply(y).(z3.Float))
-				return real_func.Apply(res).(z3.Float).Eq(real_sum).And(imag_func.Apply(res).(z3.Float).Eq(imag_sum))
+				return real_func.Apply(res_v).(z3.Float).Eq(real_sum).And(imag_func.Apply(res_v).(z3.Float).Eq(imag_sum))
 			default:
 				panic("impossible op for this type")
 			}
@@ -383,9 +392,9 @@ func (v *IntraVisitorSsa) visitBinOp(binop *ssa.BinOp) z3.Bool {
 	case token.QUO:
 		switch tx := x.(type) {
 		case z3.BV:
-			return res.(z3.BV).Eq(tx.SDiv(y.(z3.BV)))
+			return res_v.(z3.BV).Eq(tx.SDiv(y.(z3.BV)))
 		case z3.Float:
-			return res.(z3.Float).Eq(tx.Div(y.(z3.Float)))
+			return res_v.(z3.Float).Eq(tx.Div(y.(z3.Float)))
 		case z3.Uninterpreted:
 			switch binop.Type().String() {
 			case "complex128":
@@ -393,7 +402,7 @@ func (v *IntraVisitorSsa) visitBinOp(binop *ssa.BinOp) z3.Bool {
 				imag_func := v.mem.GetFuncOrCreate("imag", []string{"complex128"}, "float64", v.ctx )
 				real_sum := real_func.Apply(tx).(z3.Float).Div(real_func.Apply(y).(z3.Float))
 				imag_sum := imag_func.Apply(tx).(z3.Float).Div(imag_func.Apply(y).(z3.Float))
-				return real_func.Apply(res).(z3.Float).Eq(real_sum).And(imag_func.Apply(res).(z3.Float).Eq(imag_sum))
+				return real_func.Apply(res_v).(z3.Float).Eq(real_sum).And(imag_func.Apply(res_v).(z3.Float).Eq(imag_sum))
 			default:
 				panic("impossible op for this type")
 			}
@@ -403,115 +412,115 @@ func (v *IntraVisitorSsa) visitBinOp(binop *ssa.BinOp) z3.Bool {
 	case token.REM:
 		switch x.(type) {
 		case z3.BV:
-			return res.(z3.BV).Eq(x.(z3.BV).SRem(y.(z3.BV)))
+			return res_v.(z3.BV).Eq(x.(z3.BV).SRem(y.(z3.BV)))
 		case z3.Float:
-			return res.(z3.Float).Eq(x.(z3.Float).Rem(y.(z3.Float)))
+			return res_v.(z3.Float).Eq(x.(z3.Float).Rem(y.(z3.Float)))
 		default:
 			panic("impossible op for this type")
 		}
 	case token.AND:
 		switch x.(type) {
 		case z3.BV:
-			return res.(z3.BV).Eq(x.(z3.BV).And(y.(z3.BV)))
+			return res_v.(z3.BV).Eq(x.(z3.BV).And(y.(z3.BV)))
 		case z3.Bool:
-			return res.(z3.Bool).Eq(x.(z3.Bool).And(y.(z3.Bool)))
+			return res_v.(z3.Bool).Eq(x.(z3.Bool).And(y.(z3.Bool)))
 		default:
 			panic("impossible op for this type")
 		}
 	case token.OR:
 		switch x.(type) {
 		case z3.BV:
-			return res.(z3.BV).Eq(x.(z3.BV).Or(y.(z3.BV)))
+			return res_v.(z3.BV).Eq(x.(z3.BV).Or(y.(z3.BV)))
 		case z3.Bool:
-			return res.(z3.Bool).Eq(x.(z3.Bool).Or(y.(z3.Bool)))
+			return res_v.(z3.Bool).Eq(x.(z3.Bool).Or(y.(z3.Bool)))
 		default:
 			panic("impossible op for this type")
 		}
 	case token.XOR:
 		switch x.(type) {
 		case z3.BV:
-			return res.(z3.BV).Eq(x.(z3.BV).Xor(y.(z3.BV)))
+			return res_v.(z3.BV).Eq(x.(z3.BV).Xor(y.(z3.BV)))
 		case z3.Bool:
-			return res.(z3.Bool).Eq(x.(z3.Bool).Xor(y.(z3.Bool)))
+			return res_v.(z3.Bool).Eq(x.(z3.Bool).Xor(y.(z3.Bool)))
 		default:
 			panic("impossible op for this type")
 		}
 	case token.SHL:
 		switch x.(type) {
 		case z3.BV:
-			return res.(z3.BV).Eq(x.(z3.BV).Lsh(y.(z3.BV)))
+			return res_v.(z3.BV).Eq(x.(z3.BV).Lsh(y.(z3.BV)))
 		default:
 			panic("impossible op for this type")
 		}
 	case token.SHR:
 		switch x.(type) {
 		case z3.BV:
-			return res.(z3.BV).Eq(x.(z3.BV).URsh(y.(z3.BV)))
+			return res_v.(z3.BV).Eq(x.(z3.BV).URsh(y.(z3.BV)))
 		default:
 			panic("impossible op for this type")
 		}
 	case token.AND_NOT:
 		switch x.(type) {
 		case z3.BV:
-			return res.(z3.BV).Eq(x.(z3.BV).And(y.(z3.BV).Not()))
+			return res_v.(z3.BV).Eq(x.(z3.BV).And(y.(z3.BV).Not()))
 		default:
 			panic("impossible op for this type")
 		}
 	case token.EQL:
 		switch x.(type) {
 		case z3.BV:
-			return res.(z3.Bool).Eq(x.(z3.BV).Eq(y.(z3.BV)))
+			return res_v.(z3.Bool).Eq(x.(z3.BV).Eq(y.(z3.BV)))
 		case z3.Float:
-			return res.(z3.Bool).Eq(x.(z3.Float).Eq(y.(z3.Float)))
+			return res_v.(z3.Bool).Eq(x.(z3.Float).Eq(y.(z3.Float)))
 		case z3.Bool:
-			return res.(z3.Bool).Eq(x.(z3.Bool).Eq(y.(z3.Bool)))
+			return res_v.(z3.Bool).Eq(x.(z3.Bool).Eq(y.(z3.Bool)))
 		default:
 			panic("impossible op for this type")
 		}
 	case token.NEQ:
 		switch x.(type) {
 		case z3.BV:
-			return res.(z3.Bool).Eq((x.(z3.BV).Eq(y.(z3.BV))).Not())
+			return res_v.(z3.Bool).Eq((x.(z3.BV).Eq(y.(z3.BV))).Not())
 		case z3.Float:
-			return res.(z3.Bool).Eq((x.(z3.Float).Eq(y.(z3.Float))).Not())
+			return res_v.(z3.Bool).Eq((x.(z3.Float).Eq(y.(z3.Float))).Not())
 		case z3.Bool:
-			return res.(z3.Bool).Eq((x.(z3.Bool).Eq(y.(z3.Bool))).Not())
+			return res_v.(z3.Bool).Eq((x.(z3.Bool).Eq(y.(z3.Bool))).Not())
 		default:
 			panic("impossible op for this type")
 		}
 	case token.LSS:
 		switch x.(type) {
 		case z3.BV:
-			return res.(z3.Bool).Eq(x.(z3.BV).SLT(y.(z3.BV)))
+			return res_v.(z3.Bool).Eq(x.(z3.BV).SLT(y.(z3.BV)))
 		case z3.Float:
-			return res.(z3.Bool).Eq(x.(z3.Float).LT(y.(z3.Float)))
+			return res_v.(z3.Bool).Eq(x.(z3.Float).LT(y.(z3.Float)))
 		default:
 			panic("impossible op for this type")
 		}
 	case token.LEQ:
 		switch x.(type) {
 		case z3.BV:
-			return res.(z3.Bool).Eq((x.(z3.BV).SLT(y.(z3.BV))).Or(x.(z3.BV).Eq(y.(z3.BV))))
+			return res_v.(z3.Bool).Eq((x.(z3.BV).SLT(y.(z3.BV))).Or(x.(z3.BV).Eq(y.(z3.BV))))
 		case z3.Float:
-			return res.(z3.Bool).Eq((x.(z3.Float).LT(y.(z3.Float))).Or(x.(z3.Float).Eq(y.(z3.Float))))
+			return res_v.(z3.Bool).Eq((x.(z3.Float).LT(y.(z3.Float))).Or(x.(z3.Float).Eq(y.(z3.Float))))
 		default:
 			panic("impossible op for this type")
 		}
 	case token.GTR:
 		switch x.(type) {
 		case z3.BV:
-			return res.(z3.Bool).Eq(x.(z3.BV).SGT(y.(z3.BV)))
+			return res_v.(z3.Bool).Eq(x.(z3.BV).SGT(y.(z3.BV)))
 		case z3.Float:
-			return res.(z3.Bool).Eq(x.(z3.Float).GT(y.(z3.Float)))
+			return res_v.(z3.Bool).Eq(x.(z3.Float).GT(y.(z3.Float)))
 		default:
 			panic("impossible op for this type")
 		}
 	case token.GEQ:
 		switch x.(type) {
 		case z3.BV:
-			return res.(z3.Bool).Eq((x.(z3.BV).SGT(y.(z3.BV))).Or(x.(z3.BV).Eq(y.(z3.BV))))
+			return res_v.(z3.Bool).Eq((x.(z3.BV).SGT(y.(z3.BV))).Or(x.(z3.BV).Eq(y.(z3.BV))))
 		case z3.Float:
-			return res.(z3.Bool).Eq((x.(z3.Float).GT(y.(z3.Float))).Or(x.(z3.Float).Eq(y.(z3.Float))))
+			return res_v.(z3.Bool).Eq((x.(z3.Float).GT(y.(z3.Float))).Or(x.(z3.Float).Eq(y.(z3.Float))))
 		default:
 			panic("impossible op for this type")
 		}
@@ -521,6 +530,7 @@ func (v *IntraVisitorSsa) visitBinOp(binop *ssa.BinOp) z3.Bool {
 }
 
 func (v *IntraVisitorSsa) visitUnOp(unop *ssa.UnOp) z3.Bool {
+	println("unop")
 	println(unop.Name(), "<---", unop.String())
 	return v.stub
 }
@@ -532,8 +542,8 @@ func (v *IntraVisitorSsa) visitChangeType(changeType *ssa.ChangeType) z3.Bool {
 
 func (v *IntraVisitorSsa) visitConvert(convert *ssa.Convert) z3.Bool {
 	println(convert.Name(), "<---", convert.String())
-	res := v.mem.AddVariable(convert.Name(), convert.Type().String(), v.ctx)
-	x := v.parseValue(convert.X)
+	res := v.mem.AddVariable(convert.Name(), convert.Type().String(), v.ctx).GetValue()
+	x := v.parseValue(convert.X).GetValue()
 	switch convert.Type().String() {
 	case sym_mem.SORT_FLOAT64:
 		switch tval := x.(type) {
@@ -593,32 +603,36 @@ func (v *IntraVisitorSsa) visitSlice(slice *ssa.Slice) z3.Bool {
 }
 
 func (v *IntraVisitorSsa) visitFieldAddr(fieldAddr *ssa.FieldAddr) z3.Bool {
-	println(fieldAddr.String())
+	println("fieldAddr", fieldAddr.String())
 	return v.stub
 }
 
 func (v *IntraVisitorSsa) visitField(field *ssa.Field) z3.Bool {
-	println(field.String())
+	println("field", field.String())
 	return v.stub
 }
 
 func (v *IntraVisitorSsa) visitIndexAddr(indexAddr *ssa.IndexAddr) z3.Bool {
-	println(indexAddr.String())
-	return v.stub
+	println("indexAddr", indexAddr.String())
+	println(indexAddr.Type().String())
+	println(indexAddr.Name())
+
+	res := v.mem.AddVariable(indexAddr.Name(), indexAddr.Type().String(), v.ctx).GetValue().(z3.Int)
+	return res.Eq(res)
 }
 
 func (v *IntraVisitorSsa) visitIndex(index *ssa.Index) z3.Bool {
-	println(index.String())
+	println("index", index.String())
 	return v.stub
 }
 
 func (v *IntraVisitorSsa) visitLookup(lookup *ssa.Lookup) z3.Bool {
-	println(lookup.String())
+	println("lookup", lookup.String())
 	return v.stub
 }
 
 func (v *IntraVisitorSsa) visitSelect(slct *ssa.Select) z3.Bool {
-	println(slct.String())
+	println("select", slct.String())
 	return v.stub
 }
 
@@ -638,7 +652,7 @@ func (v *IntraVisitorSsa) visitTypeAssert(typeAssert *ssa.TypeAssert) z3.Bool {
 }
 
 func (v *IntraVisitorSsa) visitExtract(extract *ssa.Extract) z3.Bool {
-	println(extract.String())
+	println("extract", extract.String())
 	return v.stub
 }
 
@@ -714,7 +728,7 @@ func (v *IntraVisitorSsa) visitSend(send *ssa.Send) z3.Bool {
 }
 
 func (v *IntraVisitorSsa) visitStore(store *ssa.Store) z3.Bool {
-	println(store.String())
+	println("store", store.String())
 	return v.stub
 }
 
@@ -733,48 +747,45 @@ func (v *IntraVisitorSsa) visitPhi(phi *ssa.Phi) z3.Bool {
 	println(phi.Type().String())
 	println(phi.String())
 
-	res := v.mem.AddVariable(phi.Name(), phi.Type().String(), v.ctx)
+	res := v.mem.AddVariable(phi.Name(), phi.Type().String(), v.ctx).GetValue()
 
 	constr := v.stub
 
 	switch tres := res.(type) {
 	case z3.Float:
 		if len(phi.Edges) != 0 {
-			constr = tres.Eq(v.mem.Variables[phi.Edges[0].Name()].(z3.Float))
+			constr = tres.Eq(v.mem.Variables[phi.Edges[0].Name()].GetValue().(z3.Float))
 			for i, edge := range phi.Edges {
 				if i == 0 {
 					continue
 				}
-				constr = constr.Or(tres.Eq(v.mem.Variables[edge.Name()].(z3.Float)))
+				constr = constr.Or(tres.Eq(v.mem.Variables[edge.Name()].GetValue().(z3.Float)))
 			}
 		}
 
 	case z3.BV:
 		if len(phi.Edges) != 0 {
-			constr = tres.Eq(v.mem.Variables[phi.Edges[0].Name()].(z3.BV))
+			constr = tres.Eq(v.mem.Variables[phi.Edges[0].Name()].GetValue().(z3.BV))
 		}
 		for i, edge := range phi.Edges {
 			if i == 0 {
 				continue
 			}
-			constr = constr.Or(tres.Eq(v.mem.Variables[edge.Name()].(z3.BV)))
+			constr = constr.Or(tres.Eq(v.mem.Variables[edge.Name()].GetValue().(z3.BV)))
 		}
 	case z3.Bool:
 		if len(phi.Edges) != 0 {
-			constr = tres.Eq(v.mem.Variables[phi.Edges[0].Name()].(z3.Bool))
+			constr = tres.Eq(v.mem.Variables[phi.Edges[0].Name()].GetValue().(z3.Bool))
 		}
 		for i, edge := range phi.Edges {
 			if i == 0 {
 				continue
 			}
-			constr = constr.Or(tres.Eq(v.mem.Variables[edge.Name()].(z3.Bool)))
+			constr = constr.Or(tres.Eq(v.mem.Variables[edge.Name()].GetValue().(z3.Bool)))
 		}
 	default:
 		panic("unsupported phi type " + tres.String())
 	}
 
-	/* 	for _, edge := range phi.Edges {
-		v.reg_aliases[edge.Name()] = phi.Comment + "_" + strconv.Itoa(phi.Block().Index)
-	} */
 	return constr
 }
