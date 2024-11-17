@@ -4,6 +4,7 @@ import (
 	"container/list"
 	"go/token"
 	"math/bits"
+	"reflect"
 	"strconv"
 
 	"github.com/kechinvv/go-z3/z3"
@@ -102,10 +103,10 @@ func (v *IntraVisitorSsa) visitFunction(fn *ssa.Function) z3.Bool {
 	println(fn.Name())
 
 	//remove this
-/* 	if fn.Name() == "compareElement" {
+	if fn.Name() == "init" {
 		return v.stub
 	}
- */
+
 	v.mem.Variables = make(map[string]*sym_mem.SymbolicVar)
 	for _, param := range fn.Params {
 		v.visitParameter(param)
@@ -234,7 +235,7 @@ func (v *IntraVisitorSsa) visitValue(value ssa.Value) *sym_mem.SymbolicVar {
 	case *ssa.Const:
 		return v.visitConst(tvalue)
 	default:
-		panic("todo: other value " + tvalue.String())
+		panic("todo: other value " + tvalue.String() + " " + reflect.TypeOf(tvalue).String())
 	}
 }
 
@@ -301,7 +302,6 @@ func (v *IntraVisitorSsa) visitCall(call *ssa.Call) z3.Bool {
 
 	func_decl := v.mem.GetFuncOrCreate(call.Call.Value.Name(), args_types, call.Type().String(), v.ctx)
 
-
 	switch tres := res.GetValue().(type) {
 	case z3.BV:
 		return tres.Eq(func_decl.Apply(args...).(z3.BV))
@@ -338,8 +338,8 @@ func (v *IntraVisitorSsa) visitBinOp(binop *ssa.BinOp) z3.Bool {
 		case z3.Uninterpreted:
 			switch binop.Type().String() {
 			case "complex128":
-				real_func := v.mem.GetFuncOrCreate("real", []string{"complex128"}, "float64", v.ctx )
-				imag_func := v.mem.GetFuncOrCreate("imag", []string{"complex128"}, "float64", v.ctx )
+				real_func := v.mem.GetFuncOrCreate("real", []string{"complex128"}, "float64", v.ctx)
+				imag_func := v.mem.GetFuncOrCreate("imag", []string{"complex128"}, "float64", v.ctx)
 				real_sum := real_func.Apply(tx).(z3.Float).Add(real_func.Apply(y).(z3.Float))
 				imag_sum := imag_func.Apply(tx).(z3.Float).Add(imag_func.Apply(y).(z3.Float))
 				return real_func.Apply(res_v).(z3.Float).Eq(real_sum).And(imag_func.Apply(res_v).(z3.Float).Eq(imag_sum))
@@ -358,8 +358,8 @@ func (v *IntraVisitorSsa) visitBinOp(binop *ssa.BinOp) z3.Bool {
 		case z3.Uninterpreted:
 			switch binop.Type().String() {
 			case "complex128":
-				real_func := v.mem.GetFuncOrCreate("real", []string{"complex128"}, "float64", v.ctx )
-				imag_func := v.mem.GetFuncOrCreate("imag", []string{"complex128"}, "float64", v.ctx )
+				real_func := v.mem.GetFuncOrCreate("real", []string{"complex128"}, "float64", v.ctx)
+				imag_func := v.mem.GetFuncOrCreate("imag", []string{"complex128"}, "float64", v.ctx)
 				real_sum := real_func.Apply(tx).(z3.Float).Sub(real_func.Apply(y).(z3.Float))
 				imag_sum := imag_func.Apply(tx).(z3.Float).Sub(imag_func.Apply(y).(z3.Float))
 				return real_func.Apply(res_v).(z3.Float).Eq(real_sum).And(imag_func.Apply(res_v).(z3.Float).Eq(imag_sum))
@@ -378,8 +378,8 @@ func (v *IntraVisitorSsa) visitBinOp(binop *ssa.BinOp) z3.Bool {
 		case z3.Uninterpreted:
 			switch binop.Type().String() {
 			case "complex128":
-				real_func := v.mem.GetFuncOrCreate("real", []string{"complex128"}, "float64", v.ctx )
-				imag_func := v.mem.GetFuncOrCreate("imag", []string{"complex128"}, "float64", v.ctx )
+				real_func := v.mem.GetFuncOrCreate("real", []string{"complex128"}, "float64", v.ctx)
+				imag_func := v.mem.GetFuncOrCreate("imag", []string{"complex128"}, "float64", v.ctx)
 				real_sum := real_func.Apply(tx).(z3.Float).Mul(real_func.Apply(y).(z3.Float))
 				imag_sum := imag_func.Apply(tx).(z3.Float).Mul(imag_func.Apply(y).(z3.Float))
 				return real_func.Apply(res_v).(z3.Float).Eq(real_sum).And(imag_func.Apply(res_v).(z3.Float).Eq(imag_sum))
@@ -398,8 +398,8 @@ func (v *IntraVisitorSsa) visitBinOp(binop *ssa.BinOp) z3.Bool {
 		case z3.Uninterpreted:
 			switch binop.Type().String() {
 			case "complex128":
-				real_func := v.mem.GetFuncOrCreate("real", []string{"complex128"}, "float64", v.ctx )
-				imag_func := v.mem.GetFuncOrCreate("imag", []string{"complex128"}, "float64", v.ctx )
+				real_func := v.mem.GetFuncOrCreate("real", []string{"complex128"}, "float64", v.ctx)
+				imag_func := v.mem.GetFuncOrCreate("imag", []string{"complex128"}, "float64", v.ctx)
 				real_sum := real_func.Apply(tx).(z3.Float).Div(real_func.Apply(y).(z3.Float))
 				imag_sum := imag_func.Apply(tx).(z3.Float).Div(imag_func.Apply(y).(z3.Float))
 				return real_func.Apply(res_v).(z3.Float).Eq(real_sum).And(imag_func.Apply(res_v).(z3.Float).Eq(imag_sum))
@@ -532,7 +532,30 @@ func (v *IntraVisitorSsa) visitBinOp(binop *ssa.BinOp) z3.Bool {
 func (v *IntraVisitorSsa) visitUnOp(unop *ssa.UnOp) z3.Bool {
 	println("unop")
 	println(unop.Name(), "<---", unop.String())
-	return v.stub
+	x := v.parseValue(unop.X)
+	res := v.mem.AddVariable(unop.Name(), unop.Type().String(), v.ctx)
+	res_v := res.GetValue()
+	switch unop.Op {
+	case token.MUL:
+		if x.IsGoPointer {
+			switch res_v_t := res_v.(type) {
+			case z3.BV:
+				return res_v_t.Eq(x.GetValue().(z3.BV))
+			case z3.Float:
+				return res_v_t.Eq(x.GetValue().(z3.Float))
+			case z3.Bool:
+				return res_v_t.Eq(x.GetValue().(z3.Bool))
+			case z3.Int:
+				return res_v_t.Eq(x.GetValue().(z3.Int))
+			default:
+				panic("impossible op for this type")
+			}
+		} else {
+			panic("it is not pointer")
+		}
+	default:
+		panic("unknown op")
+	}
 }
 
 func (v *IntraVisitorSsa) visitChangeType(changeType *ssa.ChangeType) z3.Bool {
@@ -603,8 +626,32 @@ func (v *IntraVisitorSsa) visitSlice(slice *ssa.Slice) z3.Bool {
 }
 
 func (v *IntraVisitorSsa) visitFieldAddr(fieldAddr *ssa.FieldAddr) z3.Bool {
-	println("fieldAddr", fieldAddr.String())
-	return v.stub
+	println("fieldAddr", fieldAddr.Name(), "<---", fieldAddr.String())
+
+	res := v.mem.AddVariable(fieldAddr.Name(), fieldAddr.Type().String(), v.ctx)
+	x := v.parseValue(fieldAddr.X)
+
+	res_v := res.GetValue()
+
+	field, ok := x.Sort.Fields[fieldAddr.Field]
+	if !ok {
+		field = x.Sort.AddField(fieldAddr.Field, fieldAddr.Type().String()[1:], v.ctx)
+	}
+
+	field_value := field.Array.Select(x.Value)
+
+	switch arr_el_t := field_value.(type) {
+	case z3.BV:
+		return res_v.(z3.BV).Eq(arr_el_t)
+	case z3.Float:
+		return res_v.(z3.Float).Eq(arr_el_t)
+	case z3.Bool:
+		return res_v.(z3.Bool).Eq(arr_el_t)
+	case z3.Int:
+		return res_v.(z3.Int).Eq(arr_el_t)
+	default:
+		panic("unsupported op " + reflect.TypeOf(arr_el_t).String())
+	}
 }
 
 func (v *IntraVisitorSsa) visitField(field *ssa.Field) z3.Bool {
@@ -613,12 +660,26 @@ func (v *IntraVisitorSsa) visitField(field *ssa.Field) z3.Bool {
 }
 
 func (v *IntraVisitorSsa) visitIndexAddr(indexAddr *ssa.IndexAddr) z3.Bool {
-	println("indexAddr", indexAddr.String())
-	println(indexAddr.Type().String())
-	println(indexAddr.Name())
+	println(indexAddr.Name(), "<---", indexAddr.String())
 
-	res := v.mem.AddVariable(indexAddr.Name(), indexAddr.Type().String(), v.ctx).GetValue().(z3.Int)
-	return res.Eq(res)
+	index := v.parseValue(indexAddr.Index).GetValue()
+	array := v.parseValue(indexAddr.X)
+
+	res := v.mem.AddVariable(indexAddr.Name(), indexAddr.Type().String(), v.ctx)
+	res_v := res.GetValue()
+	arr_el := array.Sort.Values.Select(array.Value).(z3.Array).Select(index)
+	switch arr_el_t := arr_el.(type) {
+	case z3.BV:
+		return res_v.(z3.BV).Eq(arr_el_t)
+	case z3.Float:
+		return res_v.(z3.Float).Eq(arr_el_t)
+	case z3.Bool:
+		return res_v.(z3.Bool).Eq(arr_el_t)
+	case z3.Int:
+		return res_v.(z3.Int).Eq(arr_el_t)
+	default:
+		panic("unsupported op " + reflect.TypeOf(arr_el_t).String())
+	}
 }
 
 func (v *IntraVisitorSsa) visitIndex(index *ssa.Index) z3.Bool {

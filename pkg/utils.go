@@ -32,3 +32,12 @@ func GetSortByName(ctx *z3.Context, name SORT_NAME) z3.Sort {
 }
 
 
+func (s *SymbolicMem) ResolveArraySort(ctx *z3.Context, name SORT_NAME) z3.Sort {
+	head := string(name[:2])
+	if head == "[]" {
+		tail := name[2:]
+		return ctx.ArraySort(ctx.BVSort(64), s.ResolveArraySort(ctx, tail))
+	} else {
+		return s.GetTypeOrCreate(name, ctx).Sort_obj
+	}
+}
