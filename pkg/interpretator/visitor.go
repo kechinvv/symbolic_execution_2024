@@ -2,6 +2,7 @@ package interpretator
 
 import (
 	"container/list"
+	"errors"
 	"go/token"
 	"math/bits"
 	"reflect"
@@ -15,59 +16,58 @@ import (
 type Visitor interface {
 	visitProgram(*ssa.Program)
 	visitPackage(*ssa.Package)
-	visitFunction(*ssa.Function) z3.Bool
+	VisitFunction(*ssa.Function) (z3.Bool, error)
 	visitParameter(*ssa.Parameter)
-	visitBlock(*ssa.BasicBlock) z3.Bool
-	visitInstruction(ssa.Instruction) z3.Bool
+	visitBlock(*ssa.BasicBlock) (z3.Bool, error)
+	visitInstruction(ssa.Instruction) (z3.Bool, error)
 
-	visitAlloc(*ssa.Alloc) z3.Bool
-	visitCall(*ssa.Call) z3.Bool
-	visitBinOp(*ssa.BinOp) z3.Bool
-	visitUnOp(*ssa.UnOp) z3.Bool
-	visitChangeType(*ssa.ChangeType) z3.Bool
-	visitConvert(*ssa.Convert) z3.Bool
-	visitMultiConvert(*ssa.MultiConvert) z3.Bool
-	visitChangeInterface(*ssa.ChangeInterface) z3.Bool
-	visitSliceToArrayPointer(*ssa.SliceToArrayPointer) z3.Bool
-	visitMakeInterface(*ssa.MakeInterface) z3.Bool
-	visitMakeClosure(*ssa.MakeClosure) z3.Bool
-	visitMakeMap(*ssa.MakeMap) z3.Bool
-	visitMakeChan(*ssa.MakeChan) z3.Bool
-	visitMakeSlice(*ssa.MakeSlice) z3.Bool
-	visitSlice(*ssa.Slice) z3.Bool
-	visitFieldAddr(*ssa.FieldAddr) z3.Bool
-	visitField(*ssa.Field) z3.Bool
-	visitIndexAddr(*ssa.IndexAddr) z3.Bool
-	visitIndex(*ssa.Index) z3.Bool
-	visitLookup(*ssa.Lookup) z3.Bool
-	visitSelect(*ssa.Select) z3.Bool
-	visitRange(*ssa.Range) z3.Bool
-	visitNext(*ssa.Next) z3.Bool
-	visitTypeAssert(*ssa.TypeAssert) z3.Bool
-	visitExtract(*ssa.Extract) z3.Bool
-	visitJump(*ssa.Jump) z3.Bool
-	visitIf(*ssa.If) z3.Bool
-	visitReturn(*ssa.Return) z3.Bool
-	visitRunDefers(*ssa.RunDefers) z3.Bool
-	visitPanic(*ssa.Panic) z3.Bool
-	visitGo(*ssa.Go) z3.Bool
-	visitDefer(*ssa.Defer) z3.Bool
-	visitSend(*ssa.Send) z3.Bool
-	visitStore(*ssa.Store) z3.Bool
-	visitMapUpdate(*ssa.MapUpdate) z3.Bool
-	visitDebugRef(*ssa.DebugRef) z3.Bool
-	visitPhi(*ssa.Phi) z3.Bool
+	visitAlloc(*ssa.Alloc) (z3.Bool, error)
+	visitCall(*ssa.Call) (z3.Bool, error)
+	visitBinOp(*ssa.BinOp) (z3.Bool, error)
+	visitUnOp(*ssa.UnOp) (z3.Bool, error)
+	visitChangeType(*ssa.ChangeType) (z3.Bool, error)
+	visitConvert(*ssa.Convert) (z3.Bool, error)
+	visitMultiConvert(*ssa.MultiConvert) (z3.Bool, error)
+	visitChangeInterface(*ssa.ChangeInterface) (z3.Bool, error)
+	visitSliceToArrayPointer(*ssa.SliceToArrayPointer) (z3.Bool, error)
+	visitMakeInterface(*ssa.MakeInterface) (z3.Bool, error)
+	visitMakeClosure(*ssa.MakeClosure) (z3.Bool, error)
+	visitMakeMap(*ssa.MakeMap) (z3.Bool, error)
+	visitMakeChan(*ssa.MakeChan) (z3.Bool, error)
+	visitMakeSlice(*ssa.MakeSlice) (z3.Bool, error)
+	visitSlice(*ssa.Slice) (z3.Bool, error)
+	visitFieldAddr(*ssa.FieldAddr) (z3.Bool, error)
+	visitField(*ssa.Field) (z3.Bool, error)
+	visitIndexAddr(*ssa.IndexAddr) (z3.Bool, error)
+	visitIndex(*ssa.Index) (z3.Bool, error)
+	visitLookup(*ssa.Lookup) (z3.Bool, error)
+	visitSelect(*ssa.Select) (z3.Bool, error)
+	visitRange(*ssa.Range) (z3.Bool, error)
+	visitNext(*ssa.Next) (z3.Bool, error)
+	visitTypeAssert(*ssa.TypeAssert) (z3.Bool, error)
+	visitExtract(*ssa.Extract) (z3.Bool, error)
+	visitJump(*ssa.Jump) (z3.Bool, error)
+	visitIf(*ssa.If) (z3.Bool, error)
+	visitReturn(*ssa.Return) (z3.Bool, error)
+	visitRunDefers(*ssa.RunDefers) (z3.Bool, error)
+	visitPanic(*ssa.Panic) (z3.Bool, error)
+	visitGo(*ssa.Go) (z3.Bool, error)
+	visitDefer(*ssa.Defer) (z3.Bool, error)
+	visitSend(*ssa.Send) (z3.Bool, error)
+	visitStore(*ssa.Store) (z3.Bool, error)
+	visitMapUpdate(*ssa.MapUpdate) (z3.Bool, error)
+	visitDebugRef(*ssa.DebugRef) (z3.Bool, error)
+	visitPhi(*ssa.Phi) (z3.Bool, error)
 }
 
 type IntraVisitorSsa struct {
 	visited_blocks      map[int]bool
-	ctx                 *z3.Context
-	s                   *z3.Solver
-	reg_aliases         map[string]string
+	Ctx                 *z3.Context
+	S                   *z3.Solver
 	general_block_stack list.List
 
 	stub z3.Bool // anchor for chaining formula
-	mem  sym_mem.SymbolicMem
+	Mem  sym_mem.SymbolicMem
 }
 
 func NewIntraVisitorSsa() *IntraVisitorSsa {
@@ -77,7 +77,6 @@ func NewIntraVisitorSsa() *IntraVisitorSsa {
 	return &IntraVisitorSsa{map[int]bool{},
 		ctx,
 		s,
-		map[string]string{},
 		list.List{},
 		ctx.BoolConst("__!stub!__"),
 		sym_mem.NewSymbolicMem(),
@@ -94,52 +93,86 @@ func (v *IntraVisitorSsa) visitPackage(pkg *ssa.Package) {
 	for _, el := range pkg.Members {
 		f, ok := el.(*ssa.Function)
 		if ok {
-			v.visitFunction(f)
+			v.VisitFunction(f)
 		}
 	}
 }
 
-func (v *IntraVisitorSsa) visitFunction(fn *ssa.Function) z3.Bool {
+func (v *IntraVisitorSsa) GetFunctions(pkg *ssa.Package) map[string]*ssa.Function {
+	res := make(map[string]*ssa.Function)
+	for _, el := range pkg.Members {
+		f, ok := el.(*ssa.Function)
+		if ok {
+			res[f.Name()] = f
+		}
+	}
+	return res
+}
+
+func (v *IntraVisitorSsa) VisitFunction(fn *ssa.Function) (z3.Bool, error) {
 	println(fn.Name())
 
-	//remove this
 	if fn.Name() == "init" {
-		return v.stub
+		return v.stub, errors.New("stub")
 	}
 
-	v.mem.Variables = make(map[string]*sym_mem.SymbolicVar)
+	v.Mem.Variables = make(map[string]*sym_mem.SymbolicVar)
 	for _, param := range fn.Params {
 		v.visitParameter(param)
 	}
 	var res z3.Bool
+	var er error
 	if fn.Blocks == nil {
 		println("external func")
-		res = v.stub
+		res, er = v.stub, errors.New("stub")
 	} else {
-		res = v.visitBlock(fn.Blocks[0])
+		res, er = v.visitBlock(fn.Blocks[0])
 	}
-	v.reg_aliases = make(map[string]string)
 	v.visited_blocks = make(map[int]bool)
-	return res
+	return res, er
 }
 
-func (v *IntraVisitorSsa) visitBlock(block *ssa.BasicBlock) z3.Bool {
-	res := v.stub
+func (v *IntraVisitorSsa) visitBlock(block *ssa.BasicBlock) (z3.Bool, error) {
+	var res z3.Bool
 
 	if v.general_block_stack.Back() != nil && block.Index == v.general_block_stack.Back().Value.(*ssa.BasicBlock).Index {
 		println("next block is general")
-		return res
+		return v.stub, errors.New("stub")
 	}
 	v.visited_blocks[block.Index] = true
 
-	for _, instr := range block.Instrs {
-		res = res.And(v.visitInstruction(instr))
+	res_uninit := true
+	i := 0
+
+	//init res for chaining
+	for res_uninit {
+		if i < len(block.Instrs) {
+			instr_res, er := v.visitInstruction(block.Instrs[i])
+			i++
+			if er == nil {
+				res = instr_res
+				res_uninit = false
+				break
+			}
+		} else {
+			return v.stub, errors.New("stub")
+		}
 	}
+
+	//chaining
+	for i < len(block.Instrs) {
+		instr_res, er := v.visitInstruction(block.Instrs[i])
+		i++
+		if er == nil {
+			res = res.And(instr_res)
+		}
+	}
+
 	delete(v.visited_blocks, block.Index)
-	return res
+	return res, nil
 }
 
-func (v *IntraVisitorSsa) visitInstruction(instr ssa.Instruction) z3.Bool {
+func (v *IntraVisitorSsa) visitInstruction(instr ssa.Instruction) (z3.Bool, error) {
 	switch val_instr := instr.(type) {
 	case *ssa.Alloc:
 		return v.visitAlloc(val_instr)
@@ -222,7 +255,7 @@ func (v *IntraVisitorSsa) visitInstruction(instr ssa.Instruction) z3.Bool {
 }
 
 func (v *IntraVisitorSsa) parseValue(value ssa.Value) *sym_mem.SymbolicVar {
-	res, ok := v.mem.Variables[value.Name()]
+	res, ok := v.Mem.Variables[value.Name()]
 	if ok {
 		return res
 	} else {
@@ -241,7 +274,7 @@ func (v *IntraVisitorSsa) visitValue(value ssa.Value) *sym_mem.SymbolicVar {
 
 func (v *IntraVisitorSsa) visitParameter(param *ssa.Parameter) {
 	println(param.Name(), param.Type().Underlying().String())
-	v.mem.AddVariable(param.Name(), param.Type().String(), v.ctx)
+	v.Mem.AddVariable(param.Name(), param.Type().String(), v.Ctx)
 }
 
 func (v *IntraVisitorSsa) visitConst(const_value *ssa.Const) *sym_mem.SymbolicVar {
@@ -252,45 +285,46 @@ func (v *IntraVisitorSsa) visitConst(const_value *ssa.Const) *sym_mem.SymbolicVa
 		if err != nil {
 			panic("error parse bool")
 		}
-		return &sym_mem.SymbolicVar{v.ctx.FromBool(b), nil, false, false, false}
+		return &sym_mem.SymbolicVar{v.Ctx.FromBool(b), nil, false, false, false}
 	case sym_mem.SORT_INT:
 		b, err := strconv.Atoi(str_const)
 		if err != nil {
 			panic("error parse int")
 		}
-		return &sym_mem.SymbolicVar{v.ctx.FromInt(int64(b), v.ctx.BVSort(64)), nil, false, false, false}
+		return &sym_mem.SymbolicVar{v.Ctx.FromInt(int64(b), v.Ctx.BVSort(64)), nil, false, false, false}
 	case sym_mem.SORT_UINT:
 		b, err := strconv.ParseUint(str_const, 10, 64)
 		if err != nil {
 			panic("error parse int")
 		}
-		return &sym_mem.SymbolicVar{v.ctx.FromInt(int64(b), v.ctx.BVSort(bits.UintSize)), nil, false, false, false}
+		return &sym_mem.SymbolicVar{v.Ctx.FromInt(int64(b), v.Ctx.BVSort(bits.UintSize)), nil, false, false, false}
 	case sym_mem.SORT_FLOAT32:
 		b, err := strconv.ParseFloat(str_const, 32)
 		if err != nil {
 			panic("error parse float32")
 		}
-		return &sym_mem.SymbolicVar{v.ctx.FromFloat32(float32(b), v.ctx.FloatSort(8, 24)), nil, false, false, false}
+		return &sym_mem.SymbolicVar{v.Ctx.FromFloat32(float32(b), v.Ctx.FloatSort(8, 24)), nil, false, false, false}
 	case sym_mem.SORT_FLOAT64:
 		b, err := strconv.ParseFloat(str_const, 64)
 		if err != nil {
 			panic("error parse float64")
 		}
-		return &sym_mem.SymbolicVar{v.ctx.FromFloat64(b, v.ctx.FloatSort(11, 53)), nil, false, false, false}
+		return &sym_mem.SymbolicVar{v.Ctx.FromFloat64(b, v.Ctx.FloatSort(11, 53)), nil, false, false, false}
 	default:
 		panic("unsupported type " + const_value.Type().String())
 	}
 }
 
-func (v *IntraVisitorSsa) visitAlloc(alloc *ssa.Alloc) z3.Bool {
+func (v *IntraVisitorSsa) visitAlloc(alloc *ssa.Alloc) (z3.Bool, error) {
 	println(alloc.Name(), "<---", alloc.String())
-	return v.stub
+	println("stub")
+	return v.stub, errors.New("stub")
 }
 
-func (v *IntraVisitorSsa) visitCall(call *ssa.Call) z3.Bool {
+func (v *IntraVisitorSsa) visitCall(call *ssa.Call) (z3.Bool, error) {
 	println(call.Name(), "<---", call.String())
 
-	res := v.mem.AddVariable(call.Name(), call.Type().String(), v.ctx)
+	res := v.Mem.AddVariable(call.Name(), call.Type().String(), v.Ctx)
 
 	args_len := len(call.Call.Args)
 	args_types := make([]string, args_len)
@@ -300,29 +334,29 @@ func (v *IntraVisitorSsa) visitCall(call *ssa.Call) z3.Bool {
 		args[i] = v.parseValue(a).GetValue()
 	}
 
-	func_decl := v.mem.GetFuncOrCreate(call.Call.Value.Name(), args_types, call.Type().String(), v.ctx)
+	func_decl := v.Mem.GetFuncOrCreate(call.Call.Value.Name(), args_types, call.Type().String(), v.Ctx)
 
 	switch tres := res.GetValue().(type) {
 	case z3.BV:
-		return tres.Eq(func_decl.Apply(args...).(z3.BV))
+		return tres.Eq(func_decl.Apply(args...).(z3.BV)), nil
 	case z3.Float:
-		return tres.Eq(func_decl.Apply(args...).(z3.Float))
+		return tres.Eq(func_decl.Apply(args...).(z3.Float)), nil
 	case z3.Bool:
-		return tres.Eq(func_decl.Apply(args...).(z3.Bool))
+		return tres.Eq(func_decl.Apply(args...).(z3.Bool)), nil
 	case z3.Uninterpreted:
-		return tres.Eq(func_decl.Apply(args...).(z3.Uninterpreted))
+		return tres.Eq(func_decl.Apply(args...).(z3.Uninterpreted)), nil
 	case z3.Int:
-		return tres.Eq(func_decl.Apply(args...).(z3.Int))
+		return tres.Eq(func_decl.Apply(args...).(z3.Int)), nil
 	default:
 		panic("unknown type")
 	}
 }
 
-func (v *IntraVisitorSsa) visitBinOp(binop *ssa.BinOp) z3.Bool {
+func (v *IntraVisitorSsa) visitBinOp(binop *ssa.BinOp) (z3.Bool, error) {
 	println(binop.Name(), "<---", binop.String())
 	x := v.parseValue(binop.X).GetValue()
 	y := v.parseValue(binop.Y).GetValue()
-	res := v.mem.AddVariable(binop.Name(), binop.Type().String(), v.ctx)
+	res := v.Mem.AddVariable(binop.Name(), binop.Type().String(), v.Ctx)
 	res_v := res.GetValue()
 
 	if x.Sort().Kind() != y.Sort().Kind() {
@@ -332,17 +366,17 @@ func (v *IntraVisitorSsa) visitBinOp(binop *ssa.BinOp) z3.Bool {
 	case token.ADD:
 		switch tx := x.(type) {
 		case z3.BV:
-			return res_v.(z3.BV).Eq(tx.Add(y.(z3.BV)))
+			return res_v.(z3.BV).Eq(tx.Add(y.(z3.BV))), nil
 		case z3.Float:
-			return res_v.(z3.Float).Eq(tx.Add(y.(z3.Float)))
+			return res_v.(z3.Float).Eq(tx.Add(y.(z3.Float))), nil
 		case z3.Uninterpreted:
 			switch binop.Type().String() {
 			case "complex128":
-				real_func := v.mem.GetFuncOrCreate("real", []string{"complex128"}, "float64", v.ctx)
-				imag_func := v.mem.GetFuncOrCreate("imag", []string{"complex128"}, "float64", v.ctx)
+				real_func := v.Mem.GetFuncOrCreate("real", []string{"complex128"}, "float64", v.Ctx)
+				imag_func := v.Mem.GetFuncOrCreate("imag", []string{"complex128"}, "float64", v.Ctx)
 				real_sum := real_func.Apply(tx).(z3.Float).Add(real_func.Apply(y).(z3.Float))
 				imag_sum := imag_func.Apply(tx).(z3.Float).Add(imag_func.Apply(y).(z3.Float))
-				return real_func.Apply(res_v).(z3.Float).Eq(real_sum).And(imag_func.Apply(res_v).(z3.Float).Eq(imag_sum))
+				return real_func.Apply(res_v).(z3.Float).Eq(real_sum).And(imag_func.Apply(res_v).(z3.Float).Eq(imag_sum)), nil
 			default:
 				panic("impossible op for this type")
 			}
@@ -352,17 +386,17 @@ func (v *IntraVisitorSsa) visitBinOp(binop *ssa.BinOp) z3.Bool {
 	case token.SUB:
 		switch tx := x.(type) {
 		case z3.BV:
-			return res_v.(z3.BV).Eq(tx.Sub(y.(z3.BV)))
+			return res_v.(z3.BV).Eq(tx.Sub(y.(z3.BV))), nil
 		case z3.Float:
-			return res_v.(z3.Float).Eq(tx.Sub(y.(z3.Float)))
+			return res_v.(z3.Float).Eq(tx.Sub(y.(z3.Float))), nil
 		case z3.Uninterpreted:
 			switch binop.Type().String() {
 			case "complex128":
-				real_func := v.mem.GetFuncOrCreate("real", []string{"complex128"}, "float64", v.ctx)
-				imag_func := v.mem.GetFuncOrCreate("imag", []string{"complex128"}, "float64", v.ctx)
+				real_func := v.Mem.GetFuncOrCreate("real", []string{"complex128"}, "float64", v.Ctx)
+				imag_func := v.Mem.GetFuncOrCreate("imag", []string{"complex128"}, "float64", v.Ctx)
 				real_sum := real_func.Apply(tx).(z3.Float).Sub(real_func.Apply(y).(z3.Float))
 				imag_sum := imag_func.Apply(tx).(z3.Float).Sub(imag_func.Apply(y).(z3.Float))
-				return real_func.Apply(res_v).(z3.Float).Eq(real_sum).And(imag_func.Apply(res_v).(z3.Float).Eq(imag_sum))
+				return real_func.Apply(res_v).(z3.Float).Eq(real_sum).And(imag_func.Apply(res_v).(z3.Float).Eq(imag_sum)), nil
 			default:
 				panic("impossible op for this type")
 			}
@@ -372,17 +406,17 @@ func (v *IntraVisitorSsa) visitBinOp(binop *ssa.BinOp) z3.Bool {
 	case token.MUL:
 		switch tx := x.(type) {
 		case z3.BV:
-			return res_v.(z3.BV).Eq(tx.Mul(y.(z3.BV)))
+			return res_v.(z3.BV).Eq(tx.Mul(y.(z3.BV))), nil
 		case z3.Float:
-			return res_v.(z3.Float).Eq(tx.Mul(y.(z3.Float)))
+			return res_v.(z3.Float).Eq(tx.Mul(y.(z3.Float))), nil
 		case z3.Uninterpreted:
 			switch binop.Type().String() {
 			case "complex128":
-				real_func := v.mem.GetFuncOrCreate("real", []string{"complex128"}, "float64", v.ctx)
-				imag_func := v.mem.GetFuncOrCreate("imag", []string{"complex128"}, "float64", v.ctx)
+				real_func := v.Mem.GetFuncOrCreate("real", []string{"complex128"}, "float64", v.Ctx)
+				imag_func := v.Mem.GetFuncOrCreate("imag", []string{"complex128"}, "float64", v.Ctx)
 				real_sum := real_func.Apply(tx).(z3.Float).Mul(real_func.Apply(y).(z3.Float))
 				imag_sum := imag_func.Apply(tx).(z3.Float).Mul(imag_func.Apply(y).(z3.Float))
-				return real_func.Apply(res_v).(z3.Float).Eq(real_sum).And(imag_func.Apply(res_v).(z3.Float).Eq(imag_sum))
+				return real_func.Apply(res_v).(z3.Float).Eq(real_sum).And(imag_func.Apply(res_v).(z3.Float).Eq(imag_sum)), nil
 			default:
 				panic("impossible op for this type")
 			}
@@ -392,17 +426,17 @@ func (v *IntraVisitorSsa) visitBinOp(binop *ssa.BinOp) z3.Bool {
 	case token.QUO:
 		switch tx := x.(type) {
 		case z3.BV:
-			return res_v.(z3.BV).Eq(tx.SDiv(y.(z3.BV)))
+			return res_v.(z3.BV).Eq(tx.SDiv(y.(z3.BV))), nil
 		case z3.Float:
-			return res_v.(z3.Float).Eq(tx.Div(y.(z3.Float)))
+			return res_v.(z3.Float).Eq(tx.Div(y.(z3.Float))), nil
 		case z3.Uninterpreted:
 			switch binop.Type().String() {
 			case "complex128":
-				real_func := v.mem.GetFuncOrCreate("real", []string{"complex128"}, "float64", v.ctx)
-				imag_func := v.mem.GetFuncOrCreate("imag", []string{"complex128"}, "float64", v.ctx)
+				real_func := v.Mem.GetFuncOrCreate("real", []string{"complex128"}, "float64", v.Ctx)
+				imag_func := v.Mem.GetFuncOrCreate("imag", []string{"complex128"}, "float64", v.Ctx)
 				real_sum := real_func.Apply(tx).(z3.Float).Div(real_func.Apply(y).(z3.Float))
 				imag_sum := imag_func.Apply(tx).(z3.Float).Div(imag_func.Apply(y).(z3.Float))
-				return real_func.Apply(res_v).(z3.Float).Eq(real_sum).And(imag_func.Apply(res_v).(z3.Float).Eq(imag_sum))
+				return real_func.Apply(res_v).(z3.Float).Eq(real_sum).And(imag_func.Apply(res_v).(z3.Float).Eq(imag_sum)), nil
 			default:
 				panic("impossible op for this type")
 			}
@@ -412,115 +446,115 @@ func (v *IntraVisitorSsa) visitBinOp(binop *ssa.BinOp) z3.Bool {
 	case token.REM:
 		switch x.(type) {
 		case z3.BV:
-			return res_v.(z3.BV).Eq(x.(z3.BV).SRem(y.(z3.BV)))
+			return res_v.(z3.BV).Eq(x.(z3.BV).SRem(y.(z3.BV))), nil
 		case z3.Float:
-			return res_v.(z3.Float).Eq(x.(z3.Float).Rem(y.(z3.Float)))
+			return res_v.(z3.Float).Eq(x.(z3.Float).Rem(y.(z3.Float))), nil
 		default:
 			panic("impossible op for this type")
 		}
 	case token.AND:
 		switch x.(type) {
 		case z3.BV:
-			return res_v.(z3.BV).Eq(x.(z3.BV).And(y.(z3.BV)))
+			return res_v.(z3.BV).Eq(x.(z3.BV).And(y.(z3.BV))), nil
 		case z3.Bool:
-			return res_v.(z3.Bool).Eq(x.(z3.Bool).And(y.(z3.Bool)))
+			return res_v.(z3.Bool).Eq(x.(z3.Bool).And(y.(z3.Bool))), nil
 		default:
 			panic("impossible op for this type")
 		}
 	case token.OR:
 		switch x.(type) {
 		case z3.BV:
-			return res_v.(z3.BV).Eq(x.(z3.BV).Or(y.(z3.BV)))
+			return res_v.(z3.BV).Eq(x.(z3.BV).Or(y.(z3.BV))), nil
 		case z3.Bool:
-			return res_v.(z3.Bool).Eq(x.(z3.Bool).Or(y.(z3.Bool)))
+			return res_v.(z3.Bool).Eq(x.(z3.Bool).Or(y.(z3.Bool))), nil
 		default:
 			panic("impossible op for this type")
 		}
 	case token.XOR:
 		switch x.(type) {
 		case z3.BV:
-			return res_v.(z3.BV).Eq(x.(z3.BV).Xor(y.(z3.BV)))
+			return res_v.(z3.BV).Eq(x.(z3.BV).Xor(y.(z3.BV))), nil
 		case z3.Bool:
-			return res_v.(z3.Bool).Eq(x.(z3.Bool).Xor(y.(z3.Bool)))
+			return res_v.(z3.Bool).Eq(x.(z3.Bool).Xor(y.(z3.Bool))), nil
 		default:
 			panic("impossible op for this type")
 		}
 	case token.SHL:
 		switch x.(type) {
 		case z3.BV:
-			return res_v.(z3.BV).Eq(x.(z3.BV).Lsh(y.(z3.BV)))
+			return res_v.(z3.BV).Eq(x.(z3.BV).Lsh(y.(z3.BV))), nil
 		default:
 			panic("impossible op for this type")
 		}
 	case token.SHR:
 		switch x.(type) {
 		case z3.BV:
-			return res_v.(z3.BV).Eq(x.(z3.BV).URsh(y.(z3.BV)))
+			return res_v.(z3.BV).Eq(x.(z3.BV).URsh(y.(z3.BV))), nil
 		default:
 			panic("impossible op for this type")
 		}
 	case token.AND_NOT:
 		switch x.(type) {
 		case z3.BV:
-			return res_v.(z3.BV).Eq(x.(z3.BV).And(y.(z3.BV).Not()))
+			return res_v.(z3.BV).Eq(x.(z3.BV).And(y.(z3.BV).Not())), nil
 		default:
 			panic("impossible op for this type")
 		}
 	case token.EQL:
 		switch x.(type) {
 		case z3.BV:
-			return res_v.(z3.Bool).Eq(x.(z3.BV).Eq(y.(z3.BV)))
+			return res_v.(z3.Bool).Eq(x.(z3.BV).Eq(y.(z3.BV))), nil
 		case z3.Float:
-			return res_v.(z3.Bool).Eq(x.(z3.Float).Eq(y.(z3.Float)))
+			return res_v.(z3.Bool).Eq(x.(z3.Float).Eq(y.(z3.Float))), nil
 		case z3.Bool:
-			return res_v.(z3.Bool).Eq(x.(z3.Bool).Eq(y.(z3.Bool)))
+			return res_v.(z3.Bool).Eq(x.(z3.Bool).Eq(y.(z3.Bool))), nil
 		default:
 			panic("impossible op for this type")
 		}
 	case token.NEQ:
 		switch x.(type) {
 		case z3.BV:
-			return res_v.(z3.Bool).Eq((x.(z3.BV).Eq(y.(z3.BV))).Not())
+			return res_v.(z3.Bool).Eq((x.(z3.BV).Eq(y.(z3.BV))).Not()), nil
 		case z3.Float:
-			return res_v.(z3.Bool).Eq((x.(z3.Float).Eq(y.(z3.Float))).Not())
+			return res_v.(z3.Bool).Eq((x.(z3.Float).Eq(y.(z3.Float))).Not()), nil
 		case z3.Bool:
-			return res_v.(z3.Bool).Eq((x.(z3.Bool).Eq(y.(z3.Bool))).Not())
+			return res_v.(z3.Bool).Eq((x.(z3.Bool).Eq(y.(z3.Bool))).Not()), nil
 		default:
 			panic("impossible op for this type")
 		}
 	case token.LSS:
 		switch x.(type) {
 		case z3.BV:
-			return res_v.(z3.Bool).Eq(x.(z3.BV).SLT(y.(z3.BV)))
+			return res_v.(z3.Bool).Eq(x.(z3.BV).SLT(y.(z3.BV))), nil
 		case z3.Float:
-			return res_v.(z3.Bool).Eq(x.(z3.Float).LT(y.(z3.Float)))
+			return res_v.(z3.Bool).Eq(x.(z3.Float).LT(y.(z3.Float))), nil
 		default:
 			panic("impossible op for this type")
 		}
 	case token.LEQ:
 		switch x.(type) {
 		case z3.BV:
-			return res_v.(z3.Bool).Eq((x.(z3.BV).SLT(y.(z3.BV))).Or(x.(z3.BV).Eq(y.(z3.BV))))
+			return res_v.(z3.Bool).Eq((x.(z3.BV).SLT(y.(z3.BV))).Or(x.(z3.BV).Eq(y.(z3.BV)))), nil
 		case z3.Float:
-			return res_v.(z3.Bool).Eq((x.(z3.Float).LT(y.(z3.Float))).Or(x.(z3.Float).Eq(y.(z3.Float))))
+			return res_v.(z3.Bool).Eq((x.(z3.Float).LT(y.(z3.Float))).Or(x.(z3.Float).Eq(y.(z3.Float)))), nil
 		default:
 			panic("impossible op for this type")
 		}
 	case token.GTR:
 		switch x.(type) {
 		case z3.BV:
-			return res_v.(z3.Bool).Eq(x.(z3.BV).SGT(y.(z3.BV)))
+			return res_v.(z3.Bool).Eq(x.(z3.BV).SGT(y.(z3.BV))), nil
 		case z3.Float:
-			return res_v.(z3.Bool).Eq(x.(z3.Float).GT(y.(z3.Float)))
+			return res_v.(z3.Bool).Eq(x.(z3.Float).GT(y.(z3.Float))), nil
 		default:
 			panic("impossible op for this type")
 		}
 	case token.GEQ:
 		switch x.(type) {
 		case z3.BV:
-			return res_v.(z3.Bool).Eq((x.(z3.BV).SGT(y.(z3.BV))).Or(x.(z3.BV).Eq(y.(z3.BV))))
+			return res_v.(z3.Bool).Eq((x.(z3.BV).SGT(y.(z3.BV))).Or(x.(z3.BV).Eq(y.(z3.BV)))), nil
 		case z3.Float:
-			return res_v.(z3.Bool).Eq((x.(z3.Float).GT(y.(z3.Float))).Or(x.(z3.Float).Eq(y.(z3.Float))))
+			return res_v.(z3.Bool).Eq((x.(z3.Float).GT(y.(z3.Float))).Or(x.(z3.Float).Eq(y.(z3.Float)))), nil
 		default:
 			panic("impossible op for this type")
 		}
@@ -529,24 +563,24 @@ func (v *IntraVisitorSsa) visitBinOp(binop *ssa.BinOp) z3.Bool {
 	}
 }
 
-func (v *IntraVisitorSsa) visitUnOp(unop *ssa.UnOp) z3.Bool {
+func (v *IntraVisitorSsa) visitUnOp(unop *ssa.UnOp) (z3.Bool, error) {
 	println("unop")
 	println(unop.Name(), "<---", unop.String())
 	x := v.parseValue(unop.X)
-	res := v.mem.AddVariable(unop.Name(), unop.Type().String(), v.ctx)
+	res := v.Mem.AddVariable(unop.Name(), unop.Type().String(), v.Ctx)
 	res_v := res.GetValue()
 	switch unop.Op {
 	case token.MUL:
 		if x.IsGoPointer {
 			switch res_v_t := res_v.(type) {
 			case z3.BV:
-				return res_v_t.Eq(x.GetValue().(z3.BV))
+				return res_v_t.Eq(x.GetValue().(z3.BV)), nil
 			case z3.Float:
-				return res_v_t.Eq(x.GetValue().(z3.Float))
+				return res_v_t.Eq(x.GetValue().(z3.Float)), nil
 			case z3.Bool:
-				return res_v_t.Eq(x.GetValue().(z3.Bool))
+				return res_v_t.Eq(x.GetValue().(z3.Bool)), nil
 			case z3.Int:
-				return res_v_t.Eq(x.GetValue().(z3.Int))
+				return res_v_t.Eq(x.GetValue().(z3.Int)), nil
 			default:
 				panic("impossible op for this type")
 			}
@@ -558,20 +592,21 @@ func (v *IntraVisitorSsa) visitUnOp(unop *ssa.UnOp) z3.Bool {
 	}
 }
 
-func (v *IntraVisitorSsa) visitChangeType(changeType *ssa.ChangeType) z3.Bool {
+func (v *IntraVisitorSsa) visitChangeType(changeType *ssa.ChangeType) (z3.Bool, error) {
 	println(changeType.Name(), "<---", changeType.String())
-	return v.stub
+	println("stub")
+	return v.stub, errors.New("stub")
 }
 
-func (v *IntraVisitorSsa) visitConvert(convert *ssa.Convert) z3.Bool {
+func (v *IntraVisitorSsa) visitConvert(convert *ssa.Convert) (z3.Bool, error) {
 	println(convert.Name(), "<---", convert.String())
-	res := v.mem.AddVariable(convert.Name(), convert.Type().String(), v.ctx).GetValue()
+	res := v.Mem.AddVariable(convert.Name(), convert.Type().String(), v.Ctx).GetValue()
 	x := v.parseValue(convert.X).GetValue()
 	switch convert.Type().String() {
 	case sym_mem.SORT_FLOAT64:
 		switch tval := x.(type) {
 		case z3.BV:
-			return res.(z3.Float).Eq(tval.IEEEToFloat(v.ctx.FloatSort(11, 53)))
+			return res.(z3.Float).Eq(tval.IEEEToFloat(v.Ctx.FloatSort(11, 53))), nil
 		default:
 			panic("unsopprted cast")
 		}
@@ -580,144 +615,161 @@ func (v *IntraVisitorSsa) visitConvert(convert *ssa.Convert) z3.Bool {
 	}
 }
 
-func (v *IntraVisitorSsa) visitMultiConvert(mconvert *ssa.MultiConvert) z3.Bool {
+func (v *IntraVisitorSsa) visitMultiConvert(mconvert *ssa.MultiConvert) (z3.Bool, error) {
 	println(mconvert.Name(), "<---", mconvert.String())
-	return v.stub
+	println("stub")
+	return v.stub, errors.New("stub")
 }
 
-func (v *IntraVisitorSsa) visitChangeInterface(changeInterface *ssa.ChangeInterface) z3.Bool {
+func (v *IntraVisitorSsa) visitChangeInterface(changeInterface *ssa.ChangeInterface) (z3.Bool, error) {
 	println(changeInterface.String())
-	return v.stub
+	println("stub")
+	return v.stub, errors.New("stub")
 }
 
-func (v *IntraVisitorSsa) visitSliceToArrayPointer(sliceAr *ssa.SliceToArrayPointer) z3.Bool {
+func (v *IntraVisitorSsa) visitSliceToArrayPointer(sliceAr *ssa.SliceToArrayPointer) (z3.Bool, error) {
 	println(sliceAr.String())
-	return v.stub
+	println("stub")
+	return v.stub, errors.New("stub")
 }
 
-func (v *IntraVisitorSsa) visitMakeInterface(makeInterface *ssa.MakeInterface) z3.Bool {
+func (v *IntraVisitorSsa) visitMakeInterface(makeInterface *ssa.MakeInterface) (z3.Bool, error) {
 	println(makeInterface.String())
-	return v.stub
+	println("stub")
+	return v.stub, errors.New("stub")
 }
 
-func (v *IntraVisitorSsa) visitMakeClosure(makeClosure *ssa.MakeClosure) z3.Bool {
+func (v *IntraVisitorSsa) visitMakeClosure(makeClosure *ssa.MakeClosure) (z3.Bool, error) {
 	println(makeClosure.String())
-	return v.stub
+	println("stub")
+	return v.stub, errors.New("stub")
 }
 
-func (v *IntraVisitorSsa) visitMakeMap(makeMap *ssa.MakeMap) z3.Bool {
+func (v *IntraVisitorSsa) visitMakeMap(makeMap *ssa.MakeMap) (z3.Bool, error) {
 	println(makeMap.String())
-	return v.stub
+	println("stub")
+	return v.stub, errors.New("stub")
 }
 
-func (v *IntraVisitorSsa) visitMakeChan(makeChan *ssa.MakeChan) z3.Bool {
+func (v *IntraVisitorSsa) visitMakeChan(makeChan *ssa.MakeChan) (z3.Bool, error) {
 	println(makeChan.String())
-	return v.stub
+	println("stub")
+	return v.stub, errors.New("stub")
 }
 
-func (v *IntraVisitorSsa) visitMakeSlice(makeSlice *ssa.MakeSlice) z3.Bool {
+func (v *IntraVisitorSsa) visitMakeSlice(makeSlice *ssa.MakeSlice) (z3.Bool, error) {
 	println(makeSlice.String())
-	return v.stub
+	println("stub")
+	return v.stub, errors.New("stub")
 }
 
-func (v *IntraVisitorSsa) visitSlice(slice *ssa.Slice) z3.Bool {
+func (v *IntraVisitorSsa) visitSlice(slice *ssa.Slice) (z3.Bool, error) {
 	println(slice.String())
-	return v.stub
+	println("stub")
+	return v.stub, errors.New("stub")
 }
 
-func (v *IntraVisitorSsa) visitFieldAddr(fieldAddr *ssa.FieldAddr) z3.Bool {
+func (v *IntraVisitorSsa) visitFieldAddr(fieldAddr *ssa.FieldAddr) (z3.Bool, error) {
 	println("fieldAddr", fieldAddr.Name(), "<---", fieldAddr.String())
 
-	res := v.mem.AddVariable(fieldAddr.Name(), fieldAddr.Type().String(), v.ctx)
+	res := v.Mem.AddVariable(fieldAddr.Name(), fieldAddr.Type().String(), v.Ctx)
 	x := v.parseValue(fieldAddr.X)
 
 	res_v := res.GetValue()
 
 	field, ok := x.Sort.Fields[fieldAddr.Field]
 	if !ok {
-		field = x.Sort.AddField(fieldAddr.Field, fieldAddr.Type().String()[1:], v.ctx)
+		field = x.Sort.AddField(fieldAddr.Field, fieldAddr.Type().String()[1:], v.Ctx)
 	}
 
 	field_value := field.Array.Select(x.Value)
 
 	switch arr_el_t := field_value.(type) {
 	case z3.BV:
-		return res_v.(z3.BV).Eq(arr_el_t)
+		return res_v.(z3.BV).Eq(arr_el_t), nil
 	case z3.Float:
-		return res_v.(z3.Float).Eq(arr_el_t)
+		return res_v.(z3.Float).Eq(arr_el_t), nil
 	case z3.Bool:
-		return res_v.(z3.Bool).Eq(arr_el_t)
+		return res_v.(z3.Bool).Eq(arr_el_t), nil
 	case z3.Int:
-		return res_v.(z3.Int).Eq(arr_el_t)
+		return res_v.(z3.Int).Eq(arr_el_t), nil
 	default:
 		panic("unsupported op " + reflect.TypeOf(arr_el_t).String())
 	}
 }
 
-func (v *IntraVisitorSsa) visitField(field *ssa.Field) z3.Bool {
+func (v *IntraVisitorSsa) visitField(field *ssa.Field) (z3.Bool, error) {
 	println("field", field.String())
-	return v.stub
+	println("stub")
+	return v.stub, errors.New("stub")
 }
 
-func (v *IntraVisitorSsa) visitIndexAddr(indexAddr *ssa.IndexAddr) z3.Bool {
+func (v *IntraVisitorSsa) visitIndexAddr(indexAddr *ssa.IndexAddr) (z3.Bool, error) {
 	println(indexAddr.Name(), "<---", indexAddr.String())
 
 	index := v.parseValue(indexAddr.Index).GetValue()
 	array := v.parseValue(indexAddr.X)
 
-	res := v.mem.AddVariable(indexAddr.Name(), indexAddr.Type().String(), v.ctx)
+	res := v.Mem.AddVariable(indexAddr.Name(), indexAddr.Type().String(), v.Ctx)
 	res_v := res.GetValue()
 	arr_el := array.Sort.Values.Select(array.Value).(z3.Array).Select(index)
 	switch arr_el_t := arr_el.(type) {
 	case z3.BV:
-		return res_v.(z3.BV).Eq(arr_el_t)
+		return res_v.(z3.BV).Eq(arr_el_t), nil
 	case z3.Float:
-		return res_v.(z3.Float).Eq(arr_el_t)
+		return res_v.(z3.Float).Eq(arr_el_t), nil
 	case z3.Bool:
-		return res_v.(z3.Bool).Eq(arr_el_t)
+		return res_v.(z3.Bool).Eq(arr_el_t), nil
 	case z3.Int:
-		return res_v.(z3.Int).Eq(arr_el_t)
+		return res_v.(z3.Int).Eq(arr_el_t), nil
 	default:
 		panic("unsupported op " + reflect.TypeOf(arr_el_t).String())
 	}
 }
 
-func (v *IntraVisitorSsa) visitIndex(index *ssa.Index) z3.Bool {
+func (v *IntraVisitorSsa) visitIndex(index *ssa.Index) (z3.Bool, error) {
 	println("index", index.String())
-	return v.stub
+	println("stub")
+	return v.stub, errors.New("stub")
 }
 
-func (v *IntraVisitorSsa) visitLookup(lookup *ssa.Lookup) z3.Bool {
+func (v *IntraVisitorSsa) visitLookup(lookup *ssa.Lookup) (z3.Bool, error) {
 	println("lookup", lookup.String())
-	return v.stub
+	println("stub")
+	return v.stub, errors.New("stub")
 }
 
-func (v *IntraVisitorSsa) visitSelect(slct *ssa.Select) z3.Bool {
+func (v *IntraVisitorSsa) visitSelect(slct *ssa.Select) (z3.Bool, error) {
 	println("select", slct.String())
-	return v.stub
+	println("stub")
+	return v.stub, errors.New("stub")
 }
 
-func (v *IntraVisitorSsa) visitRange(rng *ssa.Range) z3.Bool {
+func (v *IntraVisitorSsa) visitRange(rng *ssa.Range) (z3.Bool, error) {
 	println(rng.String())
-	return v.stub
+	println("stub")
+	return v.stub, errors.New("stub")
 }
 
-func (v *IntraVisitorSsa) visitNext(next *ssa.Next) z3.Bool {
+func (v *IntraVisitorSsa) visitNext(next *ssa.Next) (z3.Bool, error) {
 	println(next.String())
-	return v.stub
+	println("stub")
+	return v.stub, errors.New("stub")
 }
 
-func (v *IntraVisitorSsa) visitTypeAssert(typeAssert *ssa.TypeAssert) z3.Bool {
+func (v *IntraVisitorSsa) visitTypeAssert(typeAssert *ssa.TypeAssert) (z3.Bool, error) {
 	println(typeAssert.String())
-	return v.stub
+	println("stub")
+	return v.stub, errors.New("stub")
 }
 
-func (v *IntraVisitorSsa) visitExtract(extract *ssa.Extract) z3.Bool {
+func (v *IntraVisitorSsa) visitExtract(extract *ssa.Extract) (z3.Bool, error) {
 	println("extract", extract.String())
-	return v.stub
+	println("stub")
+	return v.stub, errors.New("stub")
 }
 
-func (v *IntraVisitorSsa) visitJump(jump *ssa.Jump) z3.Bool {
+func (v *IntraVisitorSsa) visitJump(jump *ssa.Jump) (z3.Bool, error) {
 	println(jump.String(), " ", jump.Block().Index)
 	jump_to := jump.Block().Succs[0].Index
 	/* 	if isPred(jump_to, jump.Block().Preds) {
@@ -725,15 +777,17 @@ func (v *IntraVisitorSsa) visitJump(jump *ssa.Jump) z3.Bool {
 	} else  */
 	if _, ok := v.visited_blocks[jump_to]; ok { //Faster than computing
 		println("loop")
-		return v.stub
+		println("stub")
+		return v.stub, errors.New("stub")
 	} else {
 		return v.visitBlock(jump.Block().Succs[0])
 	}
 }
 
-func (v *IntraVisitorSsa) visitIf(if_cond *ssa.If) z3.Bool {
+func (v *IntraVisitorSsa) visitIf(if_cond *ssa.If) (z3.Bool, error) {
 	println(if_cond.String())
 	if if_cond.Block() != nil && len(if_cond.Block().Succs) == 2 {
+		x := v.parseValue(if_cond.Cond).GetValue().(z3.Bool)
 
 		tblock := if_cond.Block().Succs[0]
 		fblock := if_cond.Block().Succs[1]
@@ -741,8 +795,8 @@ func (v *IntraVisitorSsa) visitIf(if_cond *ssa.If) z3.Bool {
 		if next != nil {
 			v.general_block_stack.PushBack(next)
 		}
-		if_res := v.visitBlock(tblock)
-		els := v.visitBlock(fblock)
+		if_res, e1 := v.visitBlock(tblock)
+		els, e2 := v.visitBlock(fblock)
 
 		if next != nil {
 			v.general_block_stack.Remove(v.general_block_stack.Back())
@@ -751,102 +805,124 @@ func (v *IntraVisitorSsa) visitIf(if_cond *ssa.If) z3.Bool {
 		} else {
 			println("nil general block")
 		}
-		return if_res.Or(els)
+		if e1 == nil && e2 == nil {
+			return x.And(if_res).Or(x.Not().And(els)), nil
+		} else if e1 == nil {
+			return x.And(if_res).Or(x.Not()), nil
+		} else if e2 == nil {
+			return x.Or(x.Not().And(els)), nil
+		} else {
+			return x.Or(x.Not()), nil
+		}
+
 	} else {
 		println("SUCCS LEN != 2  IN COND")
-		return v.stub
+		println("stub")
+		return v.stub, errors.New("stub")
 	}
 }
 
-func (v *IntraVisitorSsa) visitReturn(return_stmnt *ssa.Return) z3.Bool {
+func (v *IntraVisitorSsa) visitReturn(return_stmnt *ssa.Return) (z3.Bool, error) {
 	println(return_stmnt.String())
-	return v.stub
+	println("stub")
+	return v.stub, errors.New("stub")
 }
 
-func (v *IntraVisitorSsa) visitRunDefers(runDefers *ssa.RunDefers) z3.Bool {
+func (v *IntraVisitorSsa) visitRunDefers(runDefers *ssa.RunDefers) (z3.Bool, error) {
 	println(runDefers.String())
-	return v.stub
+	println("stub")
+	return v.stub, errors.New("stub")
 }
 
-func (v *IntraVisitorSsa) visitPanic(panic_stmnt *ssa.Panic) z3.Bool {
+func (v *IntraVisitorSsa) visitPanic(panic_stmnt *ssa.Panic) (z3.Bool, error) {
 	println(panic_stmnt.String())
-	return v.stub
+	println("stub")
+	return v.stub, errors.New("stub")
 }
 
-func (v *IntraVisitorSsa) visitGo(go_stmnt *ssa.Go) z3.Bool {
+func (v *IntraVisitorSsa) visitGo(go_stmnt *ssa.Go) (z3.Bool, error) {
 	println(go_stmnt.String())
-	return v.stub
+	println("stub")
+	return v.stub, errors.New("stub")
 }
 
-func (v *IntraVisitorSsa) visitDefer(defer_stmnt *ssa.Defer) z3.Bool {
+func (v *IntraVisitorSsa) visitDefer(defer_stmnt *ssa.Defer) (z3.Bool, error) {
 	println(defer_stmnt.String())
-	return v.stub
+	println("stub")
+	return v.stub, errors.New("stub")
 }
 
-func (v *IntraVisitorSsa) visitSend(send *ssa.Send) z3.Bool {
+func (v *IntraVisitorSsa) visitSend(send *ssa.Send) (z3.Bool, error) {
 	println(send.String())
-	return v.stub
+	println("stub")
+	return v.stub, errors.New("stub")
 }
 
-func (v *IntraVisitorSsa) visitStore(store *ssa.Store) z3.Bool {
+func (v *IntraVisitorSsa) visitStore(store *ssa.Store) (z3.Bool, error) {
 	println("store", store.String())
-	return v.stub
+	println("stub")
+	return v.stub, errors.New("stub")
 }
 
-func (v *IntraVisitorSsa) visitMapUpdate(mapUpdate *ssa.MapUpdate) z3.Bool {
+func (v *IntraVisitorSsa) visitMapUpdate(mapUpdate *ssa.MapUpdate) (z3.Bool, error) {
 	println(mapUpdate.String())
-	return v.stub
+	println("stub")
+	return v.stub, errors.New("stub")
 }
 
-func (v *IntraVisitorSsa) visitDebugRef(debugRef *ssa.DebugRef) z3.Bool {
+func (v *IntraVisitorSsa) visitDebugRef(debugRef *ssa.DebugRef) (z3.Bool, error) {
 	println(debugRef.String())
-	return v.stub
+	println("stub")
+	return v.stub, errors.New("stub")
 }
 
-func (v *IntraVisitorSsa) visitPhi(phi *ssa.Phi) z3.Bool {
+func (v *IntraVisitorSsa) visitPhi(phi *ssa.Phi) (z3.Bool, error) {
 	println(phi.Name())
 	println(phi.Type().String())
 	println(phi.String())
 
-	res := v.mem.AddVariable(phi.Name(), phi.Type().String(), v.ctx).GetValue()
-
-	constr := v.stub
+	res := v.Mem.AddVariable(phi.Name(), phi.Type().String(), v.Ctx).GetValue()
 
 	switch tres := res.(type) {
 	case z3.Float:
 		if len(phi.Edges) != 0 {
-			constr = tres.Eq(v.mem.Variables[phi.Edges[0].Name()].GetValue().(z3.Float))
+			constr := tres.Eq(v.Mem.Variables[phi.Edges[0].Name()].GetValue().(z3.Float))
 			for i, edge := range phi.Edges {
 				if i == 0 {
 					continue
 				}
-				constr = constr.Or(tres.Eq(v.mem.Variables[edge.Name()].GetValue().(z3.Float)))
+				constr = constr.Or(tres.Eq(v.Mem.Variables[edge.Name()].GetValue().(z3.Float)))
 			}
+			return constr, nil
 		}
 
 	case z3.BV:
 		if len(phi.Edges) != 0 {
-			constr = tres.Eq(v.mem.Variables[phi.Edges[0].Name()].GetValue().(z3.BV))
-		}
-		for i, edge := range phi.Edges {
-			if i == 0 {
-				continue
+			constr := tres.Eq(v.Mem.Variables[phi.Edges[0].Name()].GetValue().(z3.BV))
+
+			for i, edge := range phi.Edges {
+				if i == 0 {
+					continue
+				}
+				constr = constr.Or(tres.Eq(v.Mem.Variables[edge.Name()].GetValue().(z3.BV)))
 			}
-			constr = constr.Or(tres.Eq(v.mem.Variables[edge.Name()].GetValue().(z3.BV)))
+			return constr, nil
 		}
 	case z3.Bool:
 		if len(phi.Edges) != 0 {
-			constr = tres.Eq(v.mem.Variables[phi.Edges[0].Name()].GetValue().(z3.Bool))
-		}
-		for i, edge := range phi.Edges {
-			if i == 0 {
-				continue
+			constr := tres.Eq(v.Mem.Variables[phi.Edges[0].Name()].GetValue().(z3.Bool))
+
+			for i, edge := range phi.Edges {
+				if i == 0 {
+					continue
+				}
+				constr = constr.Or(tres.Eq(v.Mem.Variables[edge.Name()].GetValue().(z3.Bool)))
 			}
-			constr = constr.Or(tres.Eq(v.mem.Variables[edge.Name()].GetValue().(z3.Bool)))
+			return constr, nil
 		}
 	default:
 		panic("unsupported phi type " + tres.String())
 	}
 
-	return constr
+	return v.stub, nil
 }
