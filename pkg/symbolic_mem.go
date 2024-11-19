@@ -104,6 +104,7 @@ func (s *SymbolicMem) AddType(name SORT_NAME, fields map[int]SORT_NAME, ctx *z3.
 	var a_sort z3.Sort
 
 	if name[0] == '*' {
+		//todo: may be wrong logic, UserType and *UserType is same
 		sort_object = GetSortByName(ctx, name[1:])
 	} else {
 		sort_object = GetSortByName(ctx, name)

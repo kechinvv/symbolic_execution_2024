@@ -117,6 +117,8 @@ func (v *IntraVisitorSsa) VisitFunction(fn *ssa.Function) (z3.Bool, error) {
 	}
 
 	v.Mem.Variables = make(map[string]*sym_mem.SymbolicVar)
+	v.S.Reset()
+
 	for _, param := range fn.Params {
 		v.visitParameter(param)
 	}
@@ -254,21 +256,21 @@ func (v *IntraVisitorSsa) visitInstruction(instr ssa.Instruction) (z3.Bool, erro
 	}
 }
 
-func (v *IntraVisitorSsa) parseValue(value ssa.Value) *sym_mem.SymbolicVar {
+func (v *IntraVisitorSsa) parseValue(value ssa.Value) (*sym_mem.SymbolicVar, error) {
 	res, ok := v.Mem.Variables[value.Name()]
 	if ok {
-		return res
+		return res, nil
 	} else {
 		return v.visitValue(value)
 	}
 }
 
-func (v *IntraVisitorSsa) visitValue(value ssa.Value) *sym_mem.SymbolicVar {
+func (v *IntraVisitorSsa) visitValue(value ssa.Value) (*sym_mem.SymbolicVar, error) {
 	switch tvalue := value.(type) {
 	case *ssa.Const:
-		return v.visitConst(tvalue)
+		return v.visitConst(tvalue), nil
 	default:
-		panic("todo: other value " + tvalue.String() + " " + reflect.TypeOf(tvalue).String())
+		return nil, errors.New("undeclared value or not implemented case")
 	}
 }
 
@@ -331,7 +333,12 @@ func (v *IntraVisitorSsa) visitCall(call *ssa.Call) (z3.Bool, error) {
 	args := make([]z3.Value, args_len)
 	for i, a := range call.Call.Args {
 		args_types[i] = a.Type().String()
-		args[i] = v.parseValue(a).GetValue()
+		parse_value, err := v.parseValue(a)
+		if err == nil {
+			args[i] = parse_value.GetValue()
+		} else {
+			panic(err.Error())
+		}
 	}
 
 	func_decl := v.Mem.GetFuncOrCreate(call.Call.Value.Name(), args_types, call.Type().String(), v.Ctx)
@@ -354,8 +361,15 @@ func (v *IntraVisitorSsa) visitCall(call *ssa.Call) (z3.Bool, error) {
 
 func (v *IntraVisitorSsa) visitBinOp(binop *ssa.BinOp) (z3.Bool, error) {
 	println(binop.Name(), "<---", binop.String())
-	x := v.parseValue(binop.X).GetValue()
-	y := v.parseValue(binop.Y).GetValue()
+	var x, y z3.Value
+	parse_value_x, errx := v.parseValue(binop.X)
+	parse_value_y, erry := v.parseValue(binop.X)
+	if errx == nil && erry == nil {
+		x = parse_value_x.GetValue()
+		y = parse_value_y.GetValue()
+	} else {
+		panic("undeclared var")
+	}
 	res := v.Mem.AddVariable(binop.Name(), binop.Type().String(), v.Ctx)
 	res_v := res.GetValue()
 
@@ -566,7 +580,10 @@ func (v *IntraVisitorSsa) visitBinOp(binop *ssa.BinOp) (z3.Bool, error) {
 func (v *IntraVisitorSsa) visitUnOp(unop *ssa.UnOp) (z3.Bool, error) {
 	println("unop")
 	println(unop.Name(), "<---", unop.String())
-	x := v.parseValue(unop.X)
+	x, errx := v.parseValue(unop.X)
+	if errx != nil {
+		panic("undeclared var")
+	}
 	res := v.Mem.AddVariable(unop.Name(), unop.Type().String(), v.Ctx)
 	res_v := res.GetValue()
 	switch unop.Op {
@@ -601,7 +618,13 @@ func (v *IntraVisitorSsa) visitChangeType(changeType *ssa.ChangeType) (z3.Bool, 
 func (v *IntraVisitorSsa) visitConvert(convert *ssa.Convert) (z3.Bool, error) {
 	println(convert.Name(), "<---", convert.String())
 	res := v.Mem.AddVariable(convert.Name(), convert.Type().String(), v.Ctx).GetValue()
-	x := v.parseValue(convert.X).GetValue()
+	var x z3.Value
+	parse_value_x, errx := v.parseValue(convert.X)
+	if errx == nil {
+		x = parse_value_x.GetValue()
+	} else {
+		panic("undeclared var")
+	}
 	switch convert.Type().String() {
 	case sym_mem.SORT_FLOAT64:
 		switch tval := x.(type) {
@@ -673,7 +696,10 @@ func (v *IntraVisitorSsa) visitFieldAddr(fieldAddr *ssa.FieldAddr) (z3.Bool, err
 	println("fieldAddr", fieldAddr.Name(), "<---", fieldAddr.String())
 
 	res := v.Mem.AddVariable(fieldAddr.Name(), fieldAddr.Type().String(), v.Ctx)
-	x := v.parseValue(fieldAddr.X)
+	x, err := v.parseValue(fieldAddr.X)
+	if err != nil {
+		panic("undeclared var")
+	}
 
 	res_v := res.GetValue()
 
@@ -707,8 +733,12 @@ func (v *IntraVisitorSsa) visitField(field *ssa.Field) (z3.Bool, error) {
 func (v *IntraVisitorSsa) visitIndexAddr(indexAddr *ssa.IndexAddr) (z3.Bool, error) {
 	println(indexAddr.Name(), "<---", indexAddr.String())
 
-	index := v.parseValue(indexAddr.Index).GetValue()
-	array := v.parseValue(indexAddr.X)
+	index_var, err1 := v.parseValue(indexAddr.Index)
+	array, err2 := v.parseValue(indexAddr.X)
+	if err1 != nil || err2 != nil {
+		panic("undeclared var")
+	}
+	index := index_var.GetValue()
 
 	res := v.Mem.AddVariable(indexAddr.Name(), indexAddr.Type().String(), v.Ctx)
 	res_v := res.GetValue()
@@ -787,7 +817,14 @@ func (v *IntraVisitorSsa) visitJump(jump *ssa.Jump) (z3.Bool, error) {
 func (v *IntraVisitorSsa) visitIf(if_cond *ssa.If) (z3.Bool, error) {
 	println(if_cond.String())
 	if if_cond.Block() != nil && len(if_cond.Block().Succs) == 2 {
-		x := v.parseValue(if_cond.Cond).GetValue().(z3.Bool)
+
+		var x z3.Bool
+		parse_value_x, errx := v.parseValue(if_cond.Cond)
+		if errx == nil {
+			x = parse_value_x.GetValue().(z3.Bool)
+		} else {
+			panic("undeclared var")
+		}
 
 		tblock := if_cond.Block().Succs[0]
 		fblock := if_cond.Block().Succs[1]
@@ -885,44 +922,67 @@ func (v *IntraVisitorSsa) visitPhi(phi *ssa.Phi) (z3.Bool, error) {
 
 	switch tres := res.(type) {
 	case z3.Float:
-		if len(phi.Edges) != 0 {
-			constr := tres.Eq(v.Mem.Variables[phi.Edges[0].Name()].GetValue().(z3.Float))
-			for i, edge := range phi.Edges {
-				if i == 0 {
-					continue
-				}
-				constr = constr.Or(tres.Eq(v.Mem.Variables[edge.Name()].GetValue().(z3.Float)))
+		var constr z3.Bool
+		//init constr for chain
+		for i, edge := range phi.Edges {
+			alias, err := v.parseValue(edge)
+			if err == nil {
+				constr = tres.Eq(alias.GetValue().(z3.Float))
+				break
+			} else if i == len(phi.Edges)-1 {
+				panic("no aliases")
 			}
-			return constr, nil
 		}
+		for i := 1; i < len(phi.Edges); i++ {
+			alias, ok := v.Mem.Variables[phi.Edges[i].Name()]
+			if ok {
+				constr = constr.Or(tres.Eq(alias.GetValue().(z3.Float)))
+			}
+		}
+		return constr, nil
 
 	case z3.BV:
-		if len(phi.Edges) != 0 {
-			constr := tres.Eq(v.Mem.Variables[phi.Edges[0].Name()].GetValue().(z3.BV))
-
-			for i, edge := range phi.Edges {
-				if i == 0 {
-					continue
-				}
-				constr = constr.Or(tres.Eq(v.Mem.Variables[edge.Name()].GetValue().(z3.BV)))
+		var constr z3.Bool
+		//init constr for chain
+		for i, edge := range phi.Edges {
+			alias, err := v.parseValue(edge)
+			if err == nil {
+				constr = tres.Eq(alias.GetValue().(z3.BV))
+				break
+			} else if i == len(phi.Edges)-1 {
+				panic("no aliases")
 			}
-			return constr, nil
 		}
+		for i := 1; i < len(phi.Edges); i++ {
+			alias, ok := v.Mem.Variables[phi.Edges[i].Name()]
+			if ok {
+				constr = constr.Or(tres.Eq(alias.GetValue().(z3.BV)))
+			}
+		}
+		return constr, nil
+
 	case z3.Bool:
-		if len(phi.Edges) != 0 {
-			constr := tres.Eq(v.Mem.Variables[phi.Edges[0].Name()].GetValue().(z3.Bool))
-
-			for i, edge := range phi.Edges {
-				if i == 0 {
-					continue
-				}
-				constr = constr.Or(tres.Eq(v.Mem.Variables[edge.Name()].GetValue().(z3.Bool)))
+		var constr z3.Bool
+		//init constr for chain
+		for i, edge := range phi.Edges {
+			alias, err := v.parseValue(edge)
+			if err == nil {
+				constr = tres.Eq(alias.GetValue().(z3.Bool))
+				break
+			} else if i == len(phi.Edges)-1 {
+				panic("no aliases")
 			}
-			return constr, nil
 		}
+		for i := 1; i < len(phi.Edges); i++ {
+			alias, ok := v.Mem.Variables[phi.Edges[i].Name()]
+			if ok {
+				constr = constr.Or(tres.Eq(alias.GetValue().(z3.Bool)))
+			}
+		}
+		return constr, nil
 	default:
 		panic("unsupported phi type " + tres.String())
 	}
 
-	return v.stub, nil
+	return v.stub, errors.New("stub")
 }
