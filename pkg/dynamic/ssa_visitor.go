@@ -763,7 +763,7 @@ func (v *InterVisitorSsa) visitJump(jump *ssa.Jump, ctx *z3.Context, mem *sym_me
 		println("stub") */
 		return v.stub, nil, STUB
 	} else {
-		return v.stub, []*BlockFrame{&BlockFrame{jump.Block().Succs[0], 1}}, DEFAULT
+		return v.stub, []*BlockFrame{{jump.Block().Succs[0], 1}}, JUMP
 	}
 }
 

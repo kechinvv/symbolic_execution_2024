@@ -28,7 +28,8 @@ func (state *State) copyState() *State {
 	new_state.Asserts = append(make([]z3.Bool, 0, len(state.Asserts)), state.Asserts...)
 	new_state.BLockStack = list.New()
 	for l := state.BLockStack.Front(); l != nil; l = l.Next() {
-		new_state.BLockStack.PushBack(l.Value)
+		block_frame := *l.Value.(*BlockFrame)
+		new_state.BLockStack.PushBack(&block_frame)
 	}
 	return new_state
 }

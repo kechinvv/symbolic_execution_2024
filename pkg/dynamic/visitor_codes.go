@@ -13,4 +13,5 @@ const (
 	IF_ELSE
 	LOOP
 	CALL
+	JUMP
 )

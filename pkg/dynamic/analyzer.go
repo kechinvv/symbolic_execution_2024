@@ -64,7 +64,6 @@ func (m *Machine) NextStep() {
 	}
 
 	switch code {
-
 	case DEFAULT:
 		selected_state.Asserts = append(selected_state.Asserts, assert)
 	case IF_ELSE:
@@ -80,6 +79,8 @@ func (m *Machine) NextStep() {
 		if branches[1].Block != nil {
 			new_state.BLockStack.PushBack(branches[1])
 		}
+	case JUMP:
+		selected_state.BLockStack.PushBack(branches[0])
 	}
 
 	//m.cleanAndFillSolver(selected_state.Asserts)
