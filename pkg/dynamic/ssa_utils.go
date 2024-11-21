@@ -1,6 +1,7 @@
 package dynamic
 
 import (
+	"container/list"
 	"fmt"
 	"go/ast"
 	"go/importer"
@@ -45,4 +46,28 @@ func GetSsaFromFile(file string) (*ssa.Package, error) {
 		panic(err)
 	}
 	return prg_file, err
+}
+
+func isPred(index int, preds []*ssa.BasicBlock) bool {
+	var stack list.List
+	visited := make(map[int]bool)
+	for _, pred := range preds {
+		stack.PushBack(pred)
+	}
+
+	for stack.Len() != 0 {
+		el := stack.Front()
+		v := el.Value.(*ssa.BasicBlock)
+		if v.Index == index {
+			return true
+		}
+		visited[v.Index] = true
+		for _, pred := range v.Preds {
+			if _, ok := visited[pred.Index]; !ok {
+				stack.PushBack(pred)
+			}
+		}
+		stack.Remove(el)
+	}
+	return false
 }
