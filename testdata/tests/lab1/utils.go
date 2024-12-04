@@ -44,9 +44,9 @@ func CheckWithUnsatCoreV0(s *z3.Solver) {
 			s.Pop()
 			s.Push()
 			for _, constr := range soft_constraints {
-				if !strings.HasPrefix(constr.String(),"(=> " + unsatCore[0].String()){
-					s.Assert(constr)  //PROBLEM - LOST TRACKED CONSTR
-				} 
+				if !strings.HasPrefix(constr.String(), "(=> "+unsatCore[0].String()) {
+					s.Assert(constr) //PROBLEM - LOST TRACKED CONSTR
+				}
 			}
 			println(s.AssertionsString())
 			if v, _ := s.Check(); !v {
@@ -67,7 +67,6 @@ func CheckWithUnsatCoreV0(s *z3.Solver) {
 	}
 }
 
-
 func CheckWithUnsatCoreV1(s *z3.Solver, soft_constraints []pkg.Assumption) {
 	println(s.AssertionsString())
 	if v, _ := s.Check(); !v {
@@ -84,7 +83,7 @@ func CheckWithUnsatCoreV1(s *z3.Solver, soft_constraints []pkg.Assumption) {
 				if constr.Name.String() != unsatCore[0].String() {
 					s.AssertAndTrack(constr.Expr, constr.Name)
 					active_constraints = append(active_constraints, constr)
-				} 
+				}
 			}
 			soft_constraints = active_constraints
 			println(s.AssertionsString())
