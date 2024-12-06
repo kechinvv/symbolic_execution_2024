@@ -10,12 +10,12 @@ import (
 type Machine struct {
 	Scheduler Scheduler
 	States    []*State
-	/* 	V         Visitor */
 
-	Mem *sym_mem.SymbolicMem
 	S   *z3.Solver
 	Ctx *z3.Context
 	V   *InterVisitorSsa
+	ResStates    []*State
+	/* 	V         Visitor */
 }
 
 func CreateMachine(scheduler_type SCH_TYPE) *Machine {
@@ -25,7 +25,7 @@ func CreateMachine(scheduler_type SCH_TYPE) *Machine {
 
 	switch scheduler_type {
 	case ROUND_ROBIN:
-		return &Machine{&RoundRobbinScheduler{0}, []*State{}, sym_mem.NewSymbolicMemP(), s, ctx, &InterVisitorSsa{}}
+		return &Machine{&RoundRobbinScheduler{0}, []*State{}, s, ctx, &InterVisitorSsa{}, []*State{}}
 	default:
 		panic("not implemented")
 	}
@@ -39,12 +39,16 @@ func (m *Machine) RunForFileFunc(file string, fun string) {
 
 	f, _ := funcs[fun]
 
-	state := &State{[]z3.Bool{}, list.New()}
+	state := &State{sym_mem.NewSymbolicMemP(), []z3.Bool{}, list.New()}
 	m.States = append(m.States, state)
 
-	block_frame, _ := m.V.VisitFunction(f, m.Ctx, m.Mem)
+	block_frame, _ := m.V.VisitFunction(f, m.Ctx, state.Mem)
 
 	state.BLockStack.PushBack(block_frame)
+}
+
+func (m *Machine) HasNext() bool {
+	return len(m.States) != 0
 }
 
 func (m *Machine) NextStep() {
@@ -56,7 +60,7 @@ func (m *Machine) NextStep() {
 		return
 	}
 
-	assert, branches, code := m.V.visitBlock(frame, m.Ctx, m.Mem)
+	assert, branches, code := m.V.visitBlock(frame, m.Ctx, selected_state.Mem)
 	frame.InstrIndex++
 
 	if frame.IsExhausted() {
