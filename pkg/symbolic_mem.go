@@ -46,6 +46,14 @@ func NewSymbolicMem() SymbolicMem {
 	}
 }
 
+func NewSymbolicMemP() *SymbolicMem {
+	return &SymbolicMem{
+		Sorts:     make(map[SORT_NAME]*SymbolicType),
+		Variables: make(map[string]*SymbolicVar),
+		Functions: make(map[string]z3.FuncDecl),
+	}
+}
+
 func (mem *SymbolicMem) GetFuncOrCreate(name string, arg_types []SORT_NAME, result_type SORT_NAME, ctx *z3.Context) z3.FuncDecl {
 	func_decl, ok := mem.Functions[name]
 	if !ok {

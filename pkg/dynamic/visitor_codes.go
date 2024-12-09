@@ -1,0 +1,17 @@
+package dynamic
+
+type VISITOR_CODE int
+
+const (
+	END_BLOCK VISITOR_CODE = iota
+	EXTERNAL_FUNC
+	EMPTY_FUNC
+	STUB
+	INIT_FUNC
+
+	DEFAULT
+	IF_ELSE
+	LOOP
+	CALL
+	JUMP
+)
