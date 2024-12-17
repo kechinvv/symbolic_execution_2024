@@ -11,10 +11,10 @@ type Machine struct {
 	Scheduler Scheduler
 	States    []*State
 
-	S   *z3.Solver
-	Ctx *z3.Context
-	V   *InterVisitorSsa
-	ResStates    []*State
+	S         *z3.Solver
+	Ctx       *z3.Context
+	V         *InterVisitorSsa
+	ResStates []*State
 	/* 	V         Visitor */
 }
 
@@ -56,20 +56,15 @@ func (m *Machine) NextStep() {
 	selected_state, i_s := m.Scheduler.GetExecuteCandidate(m.States)
 	frame := selected_state.BLockStack.Back().Value.(*BlockFrame)
 
-
 	assert, branches, code := m.V.visitBlock(frame, m.Ctx, selected_state.Mem)
 	frame.InstrIndex++
-
-	if frame.IsExhausted() {
-		selected_state.BLockStack.Remove(selected_state.BLockStack.Back())
-	}
 
 	switch code {
 	case DEFAULT:
 		selected_state.Asserts = append(selected_state.Asserts, assert)
 	case IF_ELSE:
 		new_state := selected_state.copyState()
-		m.States = append(m.States, new_state)
+		m.States = m.Scheduler.Append(m.States, new_state)
 
 		selected_state.Asserts = append(selected_state.Asserts, assert)
 		new_state.Asserts = append(new_state.Asserts, assert.Not())
@@ -84,16 +79,24 @@ func (m *Machine) NextStep() {
 		selected_state.BLockStack.PushBack(branches[0])
 	}
 
-	//todo: if not empty
-	frame = selected_state.BLockStack.Back().Value.(*BlockFrame)
-
-	if frame.IsExhausted() {
-		m.ResStates = append(m.ResStates, selected_state)
-		m.States = append(m.States[:i_s], m.States[i_s+1:]...)
-		return
-	}
+	m.cleanState(selected_state, i_s)
 
 	//m.cleanAndFillSolver(selected_state.Asserts)
+}
+
+func (m *Machine) cleanState(state *State, i int) {
+	if state.BLockStack.Len() > 0 {
+		frame := state.getLastFrame()
+		for state.BLockStack.Len() > 0 && frame.IsExhausted() {
+			state.dropLastFrame()
+			frame = state.getLastFrame()
+		}
+	}
+
+	if state.BLockStack.Len() == 0 {
+		m.ResStates = append(m.ResStates, state)
+		m.States = append(m.States[:i], m.States[i+1:]...)
+	}
 }
 
 func (m *Machine) cleanAndFillSolver(asserts []z3.Bool) {
