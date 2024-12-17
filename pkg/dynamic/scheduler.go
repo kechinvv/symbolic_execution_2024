@@ -66,7 +66,7 @@ type BFSScheduler struct {
 	counter int
 }
 
-//round robbin, but new states add to begin
+// round robbin, but new states add to begin
 func (s *BFSScheduler) GetExecuteCandidate(states []*State) (*State, int) {
 	if s.counter >= len(states) {
 		s.counter = 0
@@ -84,4 +84,23 @@ func (s *BFSScheduler) Append(ar []*State, el *State) []*State {
 	s.counter++
 	temp := append(make([]*State, 0, len(ar)+1), el)
 	return append(temp, ar...)
+}
+
+type MinTotalLoopScheduler struct {
+}
+
+func (s *MinTotalLoopScheduler) GetExecuteCandidate(states []*State) (*State, int) {
+	min_index := 0
+	min_state := states[min_index]
+	for i, state := range states {
+		if state.TotalLoopIteration < min_state.TotalLoopIteration {
+			min_state = state
+			min_index = i
+		}
+	}
+	return min_state, min_index
+}
+
+func (s *MinTotalLoopScheduler) Append(ar []*State, el *State) []*State {
+	return append(ar, el)
 }

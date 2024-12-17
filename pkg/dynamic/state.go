@@ -11,8 +11,10 @@ import (
 type State struct {
 	Mem *sym_mem.SymbolicMem
 
-	Asserts    []z3.Bool
-	BLockStack *list.List
+	Asserts             []z3.Bool
+	BLockStack          *list.List
+	CurrentDepth        int
+	TotalLoopIteration int
 }
 
 type BlockFrame struct {
@@ -29,6 +31,8 @@ func (state *State) copyState() *State {
 
 	new_state.Asserts = append(make([]z3.Bool, 0, len(state.Asserts)), state.Asserts...)
 	new_state.BLockStack = list.New()
+	new_state.TotalLoopIteration = state.TotalLoopIteration
+	new_state.CurrentDepth = state.CurrentDepth
 
 	//todo: copy mem
 	new_state.Mem = state.Mem

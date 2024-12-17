@@ -39,7 +39,7 @@ func (m *Machine) RunForFileFunc(file string, fun string) {
 
 	f, _ := funcs[fun]
 
-	state := &State{sym_mem.NewSymbolicMemP(), []z3.Bool{}, list.New()}
+	state := &State{sym_mem.NewSymbolicMemP(), []z3.Bool{}, list.New(), 0, 0}
 	m.States = append(m.States, state)
 
 	block_frame, _ := m.V.VisitFunction(f, m.Ctx, state.Mem)
@@ -70,12 +70,19 @@ func (m *Machine) NextStep() {
 		new_state.Asserts = append(new_state.Asserts, assert.Not())
 
 		if branches[0].Block != nil {
+			selected_state.dropLastFrame() //end of basic block
 			selected_state.BLockStack.PushBack(branches[0])
 		}
 		if branches[1].Block != nil {
+			new_state.dropLastFrame() //end of basic block
 			new_state.BLockStack.PushBack(branches[1])
 		}
 	case JUMP:
+		selected_state.dropLastFrame() //end of basic block
+		selected_state.BLockStack.PushBack(branches[0])
+	case LOOP:
+		selected_state.TotalLoopIteration++
+		selected_state.dropLastFrame() //end of basic block
 		selected_state.BLockStack.PushBack(branches[0])
 	}
 

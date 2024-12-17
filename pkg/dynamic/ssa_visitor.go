@@ -755,15 +755,11 @@ func (v *InterVisitorSsa) visitExtract(extract *ssa.Extract, ctx *z3.Context, me
 func (v *InterVisitorSsa) visitJump(jump *ssa.Jump, ctx *z3.Context, mem *sym_mem.SymbolicMem) (z3.Bool, []*BlockFrame, VISITOR_CODE) {
 	println(jump.String(), " ", jump.Block().Index)
 	jump_to := jump.Block().Succs[0].Index
-	//todo: change loop detect, fork on loop
 	if isPred(jump_to, jump.Block().Preds) {
 		println("loop")
-		/* 	if _, ok := v.visited_blocks[jump_to]; ok { //Faster than computing
-		println("loop")
-		println("stub") */
-		return v.stub, nil, STUB
+		return v.stub, []*BlockFrame{{jump.Block().Succs[0], 0}}, LOOP
 	} else {
-		return v.stub, []*BlockFrame{{jump.Block().Succs[0], 1}}, JUMP
+		return v.stub, []*BlockFrame{{jump.Block().Succs[0], 0}}, JUMP
 	}
 }
 
