@@ -53,12 +53,9 @@ func (m *Machine) HasNext() bool {
 
 func (m *Machine) NextStep() {
 
-	selected_state := m.Scheduler.GetExecuteCandidate(m.States)
+	selected_state, i_s := m.Scheduler.GetExecuteCandidate(m.States)
 	frame := selected_state.BLockStack.Back().Value.(*BlockFrame)
 
-	if frame.IsExhausted() {
-		return
-	}
 
 	assert, branches, code := m.V.visitBlock(frame, m.Ctx, selected_state.Mem)
 	frame.InstrIndex++
@@ -85,6 +82,15 @@ func (m *Machine) NextStep() {
 		}
 	case JUMP:
 		selected_state.BLockStack.PushBack(branches[0])
+	}
+
+	//todo: if not empty
+	frame = selected_state.BLockStack.Back().Value.(*BlockFrame)
+
+	if frame.IsExhausted() {
+		m.ResStates = append(m.ResStates, selected_state)
+		m.States = append(m.States[:i_s], m.States[i_s+1:]...)
+		return
 	}
 
 	//m.cleanAndFillSolver(selected_state.Asserts)
