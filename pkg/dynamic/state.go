@@ -11,10 +11,11 @@ import (
 type State struct {
 	Mem *sym_mem.SymbolicMem
 
-	Asserts             []z3.Bool
-	BLockStack          *list.List
-	CurrentDepth        int
+	Asserts            []z3.Bool
+	BLockStack         *list.List
+	CurrentDepth       int
 	TotalLoopIteration int
+	//todo: field with reference to info obj (target pkg, fn etc)
 }
 
 type BlockFrame struct {
@@ -50,4 +51,8 @@ func (state *State) getLastFrame() *BlockFrame {
 
 func (state *State) dropLastFrame() {
 	state.BLockStack.Remove(state.BLockStack.Back())
+}
+
+func (state *State) getTest() {
+	//todo: parse model solve results and call target function
 }

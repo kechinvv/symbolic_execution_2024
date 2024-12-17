@@ -112,3 +112,7 @@ func (m *Machine) cleanAndFillSolver(asserts []z3.Bool) {
 		m.S.Assert(assert)
 	}
 }
+
+func (m *Machine) addSpecification() {
+	//todo: map where key is replacement method/package and value - path to specification
+}
